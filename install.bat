@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 echo Installing backend requirements...
-python -m pip install -r backendequirements.txt
+python -m pip install -r backend\requirements.txt
 if errorlevel 1 goto fail
 cd frontend
 echo Installing frontend dependencies...
