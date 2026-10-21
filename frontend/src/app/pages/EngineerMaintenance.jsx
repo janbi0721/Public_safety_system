@@ -12,6 +12,7 @@ import VolumeUpOutlined from "@mui/icons-material/VolumeUpOutlined";
 import BugReportOutlined from "@mui/icons-material/BugReportOutlined";
 import BackupOutlined from "@mui/icons-material/BackupOutlined";
 import StorageOutlined from "@mui/icons-material/StorageOutlined";
+import PaletteOutlined from "@mui/icons-material/PaletteOutlined";
 import EngineeringDatabase from "./EngineeringDatabase";
 import { api, DEFAULT_CAMERA_ID } from "../services/api";
 import SystemStatus from "./SystemStatus";
@@ -19,6 +20,7 @@ import SystemStatus from "./SystemStatus";
 const SECTIONS = [
   { id: "cameras", label: "攝影機管理", icon: <TuneOutlined /> },
   { id: "recognition", label: "辨識設定", icon: <TuneOutlined /> },
+  { id: "box-colors", label: "框線顏色", icon: <PaletteOutlined /> },
   { id: "status", label: "系統狀態", icon: <MonitorHeartOutlined /> },
   { id: "environment", label: "環境設定 (.env)", icon: <SettingsApplicationsOutlined /> },
   { id: "voice", label: "語音警告音量", icon: <VolumeUpOutlined /> },
@@ -154,6 +156,53 @@ function VoiceSettings({ notify }) {
     <Stack direction="row" gap={1} flexWrap="wrap">
       <Button variant="contained" disabled={busy} onClick={() => void save()}>儲存音量</Button>
       <Button variant="outlined" onClick={testVoice}>測試語音</Button>
+    </Stack>
+  </CardContent></Card>;
+}
+
+const BOX_COLOR_LABELS = {
+  person: "人員", __violation__: "違規人員", helmet: "安全帽",
+  gas_mask: "防毒面具", respirator: "防毒面具", gloves: "手套", aluminized_gloves: "隔熱手套"
+};
+
+function BoxColors({ notify }) {
+  const [data, setData] = useState(null);
+  const [colors, setColors] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const apply = result => { setData(result); setColors(result.colors || {}); };
+  useEffect(() => {
+    let alive = true;
+    api.engineeringBoxColors().then(result => { if (alive) apply(result); }).catch(error => { if (alive) setError(error.message); });
+    return () => { alive = false; };
+  }, []);
+  const save = async (next) => {
+    setError(""); setBusy(true);
+    try { apply(await api.setEngineeringBoxColors(next)); notify("框線顏色已儲存，即時畫面與之後的事件截圖會立即套用。", "success"); }
+    catch (error) { setError(error.message || "儲存失敗"); }
+    finally { setBusy(false); }
+  };
+  const classes = data?.classes || [];
+  return <Card variant="outlined"><CardContent>
+    <Typography variant="h6" fontWeight={700} mb={1}>辨識框線顏色</Typography>
+    <Typography variant="body2" color="text.secondary">設定即時 AI 畫面與事件截圖中，每種物件的框線顏色。類別依目前模型自動列出。</Typography>
+    {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+    {!data && !error && <Typography sx={{ mt: 2 }}>載入中…</Typography>}
+    <Stack spacing={1.5} sx={{ mt: 3, mb: 3, maxWidth: 480 }}>
+      {classes.map(name => <Stack key={name} direction="row" alignItems="center" spacing={2}>
+        <Box component="input" type="color" aria-label={`${BOX_COLOR_LABELS[name] || name} 顏色`} value={colors[name] || "#000000"}
+          onChange={event => setColors(old => ({ ...old, [name]: event.target.value.toUpperCase() }))}
+          sx={{ width: 48, height: 32, p: 0, border: "1px solid", borderColor: "divider", borderRadius: 1, cursor: "pointer", bgcolor: "transparent" }} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography fontWeight={600}>{BOX_COLOR_LABELS[name] || name}</Typography>
+          {name !== "__violation__" && <Typography variant="caption" color="text.secondary">{name}</Typography>}
+        </Box>
+        <Typography variant="body2" sx={{ fontFamily: "monospace" }}>{colors[name]}</Typography>
+      </Stack>)}
+    </Stack>
+    <Stack direction="row" gap={1} flexWrap="wrap">
+      <Button variant="contained" disabled={busy || !data} onClick={() => void save(colors)}>儲存顏色</Button>
+      <Button variant="outlined" disabled={busy || !data} onClick={() => { if (window.confirm("確定全部還原為預設顏色？")) void save(data.defaults); }}>還原預設</Button>
     </Stack>
   </CardContent></Card>;
 }
@@ -330,6 +379,7 @@ export default function EngineerMaintenance() {
         {section === "status" && <SystemStatus />}
         {section === "environment" && <EnvironmentEditor notify={notify} />}
         {section === "voice" && <VoiceSettings notify={notify} />}
+        {section === "box-colors" && <BoxColors notify={notify} />}
         {section === "test-events" && <TestEvents notify={notify} />}
         {section === "database" && <EngineeringDatabase notify={notify} />}
         {section === "backup" && <Card variant="outlined"><CardContent>

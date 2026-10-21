@@ -32,6 +32,7 @@ from maintenance import backup_database,health_metrics
 from environment_config import list_environment,save_environment
 from v2_data import create_test_event,list_test_events,delete_test_event
 from engineering_database import catalog as engineering_db_catalog, browse as engineering_db_browse, create_row as engineering_db_create, update_row as engineering_db_update, delete_row as engineering_db_delete
+from snapshot_service import VIOLATION_KEY, HEX_COLOR, color_hex, default_color, set_box_colors
 
 from database import (
     count_active_supervisors,
@@ -97,6 +98,7 @@ async def lifespan(app: FastAPI):
 
     initialize_sources()
     persisted = get_settings()
+    set_box_colors(persisted.get('box_colors'))
     selected_model=persisted.get('active_model_path') or PPE_MODEL
     detector=Detector(
         ppe_model_path=resolve_model(selected_model),
@@ -668,6 +670,41 @@ def update_engineering_voice(payload:VoiceUpdate,user:dict=Depends(engineer)):
     save_settings({'voice_volume':payload.volume})
     audit(user['id'],'voice_volume_updated',{'volume':payload.volume})
     return {'volume':payload.volume,'message':'語音音量設定已儲存'}
+
+def _box_color_classes(request):
+    mgr=getattr(request.app.state,'camera_manager',None)
+    # The shared detector is loaded at startup even when every camera is off.
+    names=[str(n).strip().lower() for n in mgr.detector.ppe_names.values()] if mgr else []
+    for e in list(mgr.entries.values()) if mgr else []:
+        names+=[str(n).strip().lower() for n in e['worker'].detector.ppe_names.values()]
+    names+=list((get_settings().get('box_colors') or {}).keys())
+    ordered=['person',VIOLATION_KEY]+[n for n in dict.fromkeys(names) if n not in ('person',VIOLATION_KEY)]
+    return ordered
+
+def _box_color_payload(request):
+    classes=_box_color_classes(request)
+    return {'classes':classes,'colors':{n:color_hex(n) for n in classes},'defaults':{n:default_color(n) for n in classes}}
+
+@app.get('/api/admin/engineering/box-colors')
+def engineering_box_colors(request:Request,_:dict=Depends(engineer)):
+    return _box_color_payload(request)
+
+class BoxColorsUpdate(BaseModel):
+    colors:dict[str,str]=Field(max_length=40)
+
+@app.patch('/api/admin/engineering/box-colors')
+def update_engineering_box_colors(payload:BoxColorsUpdate,request:Request,user:dict=Depends(engineer)):
+    colors={}
+    for name,value in payload.colors.items():
+        key=name.strip().lower()
+        if not re.fullmatch(r'[a-z0-9_\-]{1,40}',key):raise HTTPException(422,f'類別名稱不合法：{name}')
+        if not HEX_COLOR.match(value):raise HTTPException(422,f'顏色格式需為 #RRGGBB：{name}')
+        colors[key]=value.upper()
+    # Only store real overrides, so changing a class default later still applies.
+    colors={k:v for k,v in colors.items() if v!=default_color(k)}
+    save_settings({'box_colors':colors});set_box_colors(colors)
+    audit(user['id'],'box_colors_updated',{'classes':sorted(colors)})
+    return {**_box_color_payload(request),'message':'框線顏色已儲存，即時畫面立即套用'}
 
 class TestEventInput(BaseModel):
     event_type:str
