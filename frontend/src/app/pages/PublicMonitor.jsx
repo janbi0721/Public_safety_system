@@ -1,29 +1,38 @@
-import {useEffect,useRef,useState} from "react";
-import {Button,FormControlLabel,Switch,Alert,FormControl,InputLabel,Select,MenuItem} from "@mui/material";
+import {useEffect,useMemo,useState} from "react";
+import {Button,IconButton,MenuItem,Select,Tooltip} from "@mui/material";
 import Box from "@mui/material/Box";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Chip from "@mui/material/Chip";
-import Container from "@mui/material/Container";
-import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import WarningAmberOutlined from "@mui/icons-material/WarningAmberOutlined";
-import CheckCircleOutline from "@mui/icons-material/CheckCircleOutline";
 import ShieldOutlined from "@mui/icons-material/ShieldOutlined";
+import VolumeUpRounded from "@mui/icons-material/VolumeUpRounded";
+import VolumeOffRounded from "@mui/icons-material/VolumeOffRounded";
 
 import CameraView from "app/components/CameraView";
 import { useCameraDetections } from "app/hooks/camera";
-import { DEFAULT_CAMERA_ID, api } from "app/services/api";
+import { api } from "app/services/api";
 import {useAvailableCameras} from "app/hooks/availableCameras";
+import ModeSelect from "app/components/ModeSelect";
+import { AlarmScreenFrame, VideoOverlay, WorkerStatusPanel, groupAlertsByPerson, useAlarmTitle, useAlarmVoice, useHmi, useNewAlarm } from "app/components/SafetyAlarm";
 
+function useClock() {
+  const [now,setNow]=useState(()=>new Date());
+  useEffect(()=>{const timer=setInterval(()=>setNow(new Date()),1000);return ()=>clearInterval(timer)},[]);
+  return now;
+}
+
+function StatusDot({ color }) {
+  return <Box component="span" sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: color, display: "inline-block", boxShadow: `0 0 0 3px ${color}33` }} />;
+}
+
+// Worker screen: shown on a wall display nobody scrolls, so everything fits
+// one viewport (100dvh, no page scroll); the video shrinks to fit.
 export default function PublicMonitor() {
+  const HMI = useHmi();
   const {cameras,selected,setSelected}=useAvailableCameras();
-  const { detections = [], alerts = [], timestamp, frame, connected } = useCameraDetections(selected);
+  const { alerts = [], people = [], frame, connected, aiFps } = useCameraDetections(selected);
   const [audio,setAudio]=useState(()=>localStorage.getItem('safety-audio')==='on');
   const [volume,setVolume]=useState(80);
-  const lastSpoken=useRef(new Map());
-  useEffect(()=>{lastSpoken.current.clear();window.speechSynthesis?.cancel()},[selected]);
+  const now=useClock();
   const speak=(message)=>{if(!('speechSynthesis' in window))return;window.speechSynthesis.cancel();const utter=new SpeechSynthesisUtterance(message);utter.lang='zh-TW';utter.volume=volume/100;window.speechSynthesis.speak(utter)};
   useEffect(()=>{localStorage.setItem('safety-audio',audio?'on':'off');if(!audio)window.speechSynthesis?.cancel()},[audio]);
   useEffect(()=>{
@@ -33,75 +42,77 @@ export default function PublicMonitor() {
     const timer=setInterval(refresh,15000);
     return ()=>{mounted=false;clearInterval(timer)};
   },[]);
-  useEffect(()=>{if(!audio||!connected)return;const now=Date.now();const active=new Set();for(const alert of alerts){const k=alert.eventId??`${alert.trackId}-${alert.eventType}`;active.add(k);if(now-(lastSpoken.current.get(k)||0)>=60000){speak(alert.message||'警告，請正確穿戴防護裝備');lastSpoken.current.set(k,now);break}}for(const key of lastSpoken.current.keys()){if(!active.has(key))lastSpoken.current.delete(key)}},[alerts,connected,audio,volume]);
+  const liveAlerts = useMemo(() => (connected ? alerts : []), [connected, alerts]);
+  // Each event is announced once (chime + one sentence per person); see SafetyAlarm.
+  useAlarmVoice({ alerts: liveAlerts, enabled: audio, connected, volume, cameraId: selected });
+  const alarmCount = groupAlertsByPerson(liveAlerts).length;
+  useAlarmTitle(alarmCount);
+  const flashing = useNewAlarm(liveAlerts);
+  const cameraName = cameras.find(c => c.camera_id === selected)?.name || selected;
+  const toggleAudio = () => { const next = !audio; setAudio(next); if (next) speak('語音警告已啟用'); };
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default", py: { xs: 2, md: 3 } }}>
-      <Container maxWidth="xl">
-      <Box sx={{my:2}}><FormControl size="small" sx={{minWidth:240}}><InputLabel>選擇攝影機</InputLabel><Select value={selected} label="選擇攝影機" onChange={e=>setSelected(e.target.value)}>{cameras.map(c=><MenuItem key={c.camera_id} value={c.camera_id}>{c.name}</MenuItem>)}</Select></FormControl>{!selected&&<Alert severity="info" sx={{mt:2}}>目前沒有已啟用且連線成功的攝影機</Alert>}</Box>
+    <>
+      <Box sx={{ height: "100dvh", overflow: "hidden", bgcolor: HMI.bg, color: HMI.text, display: "grid", gridTemplateRows: "auto minmax(0, 1fr)" }}>
+        <AlarmScreenFrame active={alarmCount > 0} flashing={flashing} />
 
-        <Stack direction="row" alignItems="center" spacing={1.5} mb={2.5}>
-          <ShieldOutlined color="primary" />
-          <Box>
-            <Typography variant="h5" fontWeight={800}>現場安全監控</Typography>
+        <Stack component="header" direction="row" alignItems="center" gap={{ xs: 1.5, md: 3 }} flexWrap="wrap"
+          sx={{ px: { xs: 1.5, md: 3 }, py: { xs: 1, md: 1.5 }, borderBottom: `1px solid ${HMI.border}`, bgcolor: HMI.surface }}>
+          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mr: "auto", minWidth: 0 }}>
+            <Box sx={{ width: 36, height: 36, borderRadius: 1.5, bgcolor: HMI.brandBg, display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <ShieldOutlined sx={{ color: HMI.brand, fontSize: 22 }} />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography fontWeight={700} lineHeight={1.2} noWrap sx={{ fontSize: { xs: 16, md: 18 } }}>現場安全監控</Typography>
+              <Typography noWrap sx={{ fontSize: 12, color: HMI.muted }}>PPE 即時辨識 · 安全帽 · 防毒面具 · 手套</Typography>
+            </Box>
+          </Stack>
 
+          <Select size="small" value={selected} displayEmpty onChange={e=>setSelected(e.target.value)}
+            sx={{ minWidth: 170, fontSize: 14, bgcolor: HMI.raised, "& .MuiOutlinedInput-notchedOutline": { borderColor: HMI.border } }}
+            renderValue={value => value ? (cameras.find(c => c.camera_id === value)?.name || value) : "選擇攝影機"}>
+            {cameras.map(c=><MenuItem key={c.camera_id} value={c.camera_id}>{c.name}</MenuItem>)}
+          </Select>
+
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ fontSize: 14, color: connected ? HMI.text : HMI.warn }}>
+            <StatusDot color={connected ? HMI.ok : HMI.warn} />
+            <span>{connected ? "AI 監控中" : "連線中斷"}</span>
+          </Stack>
+
+          <Stack direction="row" alignItems="center" spacing={.5}>
+            <Tooltip title={audio ? "關閉語音警告" : "開啟語音警告（每台裝置需手動開啟一次）"}>
+              <IconButton onClick={toggleAudio} aria-label={audio ? "關閉語音警告" : "開啟語音警告"}
+                sx={{ border: `1px solid ${HMI.border}`, borderRadius: 1.5, color: audio ? HMI.text : HMI.warn, px: 1.25, gap: .75, fontSize: 14 }}>
+                {audio ? <VolumeUpRounded fontSize="small" /> : <VolumeOffRounded fontSize="small" />}
+                <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>{audio ? "語音開啟" : "語音關閉"}</Box>
+              </IconButton>
+            </Tooltip>
+            <Button size="small" onClick={()=>speak('語音測試，請正確佩戴安全裝備。')} sx={{ color: HMI.muted, minWidth: 0 }}>測試</Button>
+          </Stack>
+
+          <ModeSelect />
+
+          <Box sx={{ textAlign: "right", pl: { md: 2 }, borderLeft: { md: `1px solid ${HMI.border}` } }}>
+            <Typography sx={{ fontFamily: "Consolas, 'Roboto Mono', monospace", fontWeight: 700, fontSize: { xs: 18, md: 24 }, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>
+              {now.toLocaleTimeString("zh-TW", { hour12: false })}
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: HMI.muted }}>{now.toLocaleDateString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" })}</Typography>
           </Box>
         </Stack>
 
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 3fr) minmax(300px, 1fr)" }, gap: 2.5 }}>
-          <Card variant="outlined">
-            <CardContent>
-              {selected&&<CameraView cameraId={selected} detections={detections} alerts={alerts} frame={frame} />}
-            </CardContent>
-          </Card>
-
-          <Card variant="outlined">
-            <CardContent>
-              <Typography variant="h6" fontWeight={700} mb={1}>語音警告</Typography>
-              <FormControlLabel control={<Switch checked={audio} onChange={e=>{setAudio(e.target.checked);if(e.target.checked)speak('語音警告已啟用')}}/>} label={audio?'開啟':'關閉'}/>
-              <Typography variant="body2" color="text.secondary" sx={{my:1}}>語音音量由工程師維護設定</Typography>
-              <Button variant="outlined" onClick={()=>speak('語音測試，請正確佩戴安全裝備。')}>測試喇叭</Button>
-              {!connected&&<Alert severity="error" sx={{mt:2}}>監控資料中斷</Alert>}
-            </CardContent>
-          </Card>
-          <Card variant="outlined">
-            <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="h6" fontWeight={700}>即時警示</Typography>
-                <Chip size="small" color={!connected ? "warning" : alerts.length ? "error" : "success"} label={`${alerts.length} 筆`} />
-              </Stack>
-              <Typography variant="caption" color="text.secondary">
-                {timestamp ? new Date(timestamp * 1000).toLocaleTimeString("zh-TW") : "等待 AI 資料"}
-              </Typography>
-              <Divider sx={{ my: 2 }} />
-
-              {alerts.length === 0 ? (
-                <Stack alignItems="center" textAlign="center" py={8} spacing={1}>
-                  {connected ? <CheckCircleOutline color="success" sx={{ fontSize: 54 }} /> : <WarningAmberOutlined color="warning" sx={{fontSize:54}}/>}
-                  <Typography variant="h6" fontWeight={700}>{connected ? "目前無安全警示" : "監控中斷"}</Typography>
-
-                </Stack>
-              ) : (
-                <Stack spacing={1.5}>
-                  {alerts.map((alert, index) => (
-                    <Box key={alert.eventId ?? `${alert.eventType}-${index}`} sx={{ p: 1.5, borderRadius: 2, bgcolor: "error.lighter", border: "1px solid", borderColor: "error.light" }}>
-                      <Stack direction="row" spacing={1.2} alignItems="flex-start">
-                        <WarningAmberOutlined color="error" />
-                        <Box>
-                          <Typography fontWeight={700}>{alert.message || "安全穿戴異常"}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {alert.eventType || "warning"}{alert.durationSeconds != null ? ` · 持續 ${alert.durationSeconds} 秒` : ""}
-                          </Typography>
-                        </Box>
-                      </Stack>
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </CardContent>
-          </Card>
+        <Box component="main" sx={{ display: "grid", minHeight: 0, gap: { xs: 1.5, md: 2 }, p: { xs: 1.5, md: 2 },
+          gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) clamp(320px, 30vw, 520px)" },
+          gridTemplateRows: { xs: "minmax(0, 1fr) minmax(0, 1.1fr)", md: "minmax(0, 1fr)" } }}>
+          <Box sx={{ minHeight: 0, minWidth: 0, borderRadius: 2.5, overflow: "hidden", border: "1px solid", borderColor: alarmCount ? HMI.alarm : HMI.border, bgcolor: HMI.video }}>
+            {selected
+              ? <CameraView fill showHeader={false} cameraId={selected} frame={frame}>
+                  <VideoOverlay cameraName={cameraName} fps={connected ? aiFps : null} alarmCount={alarmCount} />
+                </CameraView>
+              : <Box sx={{ height: "100%", display: "grid", placeItems: "center", color: HMI.muted }}>目前沒有已啟用且連線成功的攝影機</Box>}
+          </Box>
+          <WorkerStatusPanel alerts={liveAlerts} people={people} connected={connected} flashing={flashing} />
         </Box>
-      </Container>
-    </Box>
+      </Box>
+    </>
   );
 }

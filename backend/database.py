@@ -325,14 +325,20 @@ def end_event_detection(event_id: int, end_time: str | None = None) -> None:
         )
 
 
-def get_events(
-    limit: int = 100,
-    offset: int = 0,
+def _event_filters(
     camera_id: str | None = None,
     is_improved: bool | None = None,
-) -> list[dict[str, Any]]:
-    limit = max(1, min(int(limit), 500))
-    offset = max(0, int(offset))
+    start: str | None = None,
+    end: str | None = None,
+    event_type: str | None = None,
+    review_status: str | None = None,
+    keyword: str | None = None,
+) -> tuple[str, list[Any]]:
+    """Build the WHERE clause shared by get_events and count_events.
+
+    ``start``/``end`` are UTC 'YYYY-MM-DD HH:MM:SS' strings, matching how
+    start_time is stored; ``end`` is exclusive.
+    """
     where: list[str] = []
     params: list[Any] = []
 
@@ -342,8 +348,46 @@ def get_events(
     if is_improved is not None:
         where.append("e.is_improved = ?")
         params.append(1 if is_improved else 0)
+    if start:
+        where.append("e.start_time >= ?")
+        params.append(start)
+    if end:
+        where.append("e.start_time < ?")
+        params.append(end)
+    if event_type:
+        where.append("e.event_type = ?")
+        params.append(event_type)
+    if review_status:
+        where.append("coalesce(e.review_status, 'pending') = ?")
+        params.append(review_status)
+    if keyword and keyword.strip():
+        text = keyword.strip()
+        like = f"%{text}%"
+        where.append(
+            "(e.message LIKE ? OR e.review_note LIKE ? OR e.camera_id LIKE ? OR e.event_code LIKE ?"
+            " OR CAST(e.id AS TEXT) = ? OR CAST(e.track_id AS TEXT) = ?)"
+        )
+        params.extend([like, like, like, like, text.lstrip("#"), text.lstrip("#")])
 
-    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    return (f"WHERE {' AND '.join(where)}" if where else ""), params
+
+
+def count_events(**filters: Any) -> int:
+    where_sql, params = _event_filters(**filters)
+    with get_connection() as conn:
+        return conn.execute(f"SELECT count(*) FROM events e {where_sql}", params).fetchone()[0]
+
+
+def get_events(
+    limit: int = 100,
+    offset: int = 0,
+    camera_id: str | None = None,
+    is_improved: bool | None = None,
+    **filters: Any,
+) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 500))
+    offset = max(0, int(offset))
+    where_sql, params = _event_filters(camera_id=camera_id, is_improved=is_improved, **filters)
     params.extend([limit, offset])
 
     with get_connection() as conn:

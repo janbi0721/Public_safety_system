@@ -1,5 +1,6 @@
 import logging,threading,time
 from event_manager import EventManager
+from person_recorder import PersonRecorder
 from safety_analyzer import SafetyAnalyzer
 from snapshot_service import capture,draw
 from video_pipeline import VideoPublisher
@@ -13,6 +14,8 @@ class YoloWorker(threading.Thread):
         self._latest_raw=None;self._latest_annotated=None;self._last_frame_id=None;self._last_violation_frames={}
         self._image_lock=threading.Lock();self._last_fps_at=time.monotonic();self._frames=0;self.fps=0
         self.event_manager=EventManager(camera_id,trigger_seconds=event_trigger_seconds,on_transition=self._transition)
+        self.person_recorder=PersonRecorder(camera_id,self.event_manager)
+        self.event_manager.person_recorder=self.person_recorder
     def _transition(self,phase,event_id,ts,violation):
         with self._image_lock:
             raw=self._latest_raw.copy() if self._latest_raw is not None else None
@@ -52,6 +55,9 @@ class YoloWorker(threading.Thread):
                         self._last_violation_frames[k]=(frame.copy(),annotated.copy(),fid)
                 if len(self._last_violation_frames)>100:
                     self._last_violation_frames.pop(next(iter(self._last_violation_frames)))
+                # Record people first so a new event can be linked to its person session.
+                try:self.person_recorder.process(analysis['people'],result['timestamp'])
+                except Exception:logging.exception('Person record update failed')
                 result['alerts']=self.event_manager.process(analysis['violations'],result['timestamp'],analysis['people'])
                 self.publisher.publish(annotated)
                 self._frames+=1
@@ -61,6 +67,7 @@ class YoloWorker(threading.Thread):
                 self.state.update(result)
             except Exception as e:
                 self.error=str(e);logging.exception('YOLO Worker frame failed');time.sleep(.2)
+        self.person_recorder.close_all('system_stopped')
         self.publisher.close()
     def stop(self):
         self.stop_event.set();self.camera.release()

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
+  Alert, Button, Card, CardContent, Chip, Dialog, DialogActions,
   DialogContent, DialogTitle, FormControl, InputLabel, MenuItem, Select,
   Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Typography
@@ -195,5 +195,43 @@ export default function EngineeringDatabase({ notify }) {
     </CardContent></Card>
     <EditDialog open={Boolean(dialog)} table={table} row={dialog?.row ?? null} onClose={() => setDialog(null)}
       onSaved={() => { setDialog(null); reload(); notify?.("已儲存至資料庫"); }} />
+    <ClearEventData notify={notify} onCleared={() => { setPage(0); reload(); }} />
   </Stack>;
+}
+
+function ClearEventData({ notify, onCleared }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const close = () => { if (!busy) { setOpen(false); setText(""); setError(""); } };
+  const clear = async () => {
+    setBusy(true); setError("");
+    try {
+      const result = await api.clearEventData(text);
+      const d = result.deleted || {};
+      notify?.(`已清空：事件 ${d.events ?? 0} 筆、人員紀錄 ${d.person_sessions ?? 0} 筆、截圖 ${d.snapshot_files ?? 0} 張、AI 報告 ${d.safety_reports ?? 0} 份。清空前已自動備份：${result.backup}`);
+      setOpen(false); setText(""); onCleared?.();
+    } catch (err) { setError(err.message || "清空失敗"); }
+    finally { setBusy(false); }
+  };
+  return <Card variant="outlined" sx={{ borderColor: "error.main" }}><CardContent>
+    <Typography variant="h6" fontWeight={700} color="error" mb={1}>一鍵清空事件資料</Typography>
+    <Typography variant="body2" color="text.secondary" mb={2}>
+      刪除所有異常事件、人員紀錄、事件截圖與 AI 安全報告，事件編號的每日流水號會重新從 001 開始。帳號、攝影機、辨識設定、框線顏色、AI 對話與操作紀錄會保留。清空前會自動備份到 backend/backups。
+    </Typography>
+    <Button variant="contained" color="error" onClick={() => setOpen(true)}>清空事件資料</Button>
+    <Dialog open={open} onClose={close} maxWidth="xs" fullWidth>
+      <DialogTitle>確定清空所有事件資料？</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" mb={2}>此操作無法在網頁上復原，只能從備份檔還原。請輸入「清空」確認。</Typography>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <TextField autoFocus fullWidth size="small" label="輸入「清空」" value={text} onChange={event => setText(event.target.value)} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={close} disabled={busy}>取消</Button>
+        <Button color="error" variant="contained" disabled={busy || text.trim() !== "清空"} onClick={() => void clear()}>{busy ? "清空中…" : "確定清空"}</Button>
+      </DialogActions>
+    </Dialog>
+  </CardContent></Card>;
 }

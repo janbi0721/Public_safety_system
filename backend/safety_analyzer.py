@@ -5,6 +5,10 @@ import math
 
 ALIASES={'helmet':{'helmet','hardhat','hard_hat','hard-hat'},'respirator':{'respirator','gas_mask','gasmask','gas-mask'},'glove':{'glove','gloves','heat_glove','heat_resistant_glove','aluminized_gloves','aluminized_glove'}}
 LABELS={'helmet':'安全帽','respirator':'防毒面具','glove':'隔熱手套'}
+# Event types stored in SQLite; must match simulated events and frontend labels.
+EVENT_TYPES={'helmet':'no_helmet','respirator':'no_gas_mask','glove':'no_gloves'}
+PPE_BY_EVENT={v:k for k,v in EVENT_TYPES.items()}
+ALL_PPE=list(EVENT_TYPES)
 
 
 def inside(x,y,b):return b['x1']<=x<=b['x2'] and b['y1']<=y<=b['y2']
@@ -28,7 +32,7 @@ def visible(kps,index,threshold=.3):
 
 class SafetyAnalyzer:
     def __init__(self,required_ppe=None,supported_classes=None):
-        self.required_ppe=required_ppe if required_ppe is not None else ['helmet']
+        self.required_ppe=required_ppe if required_ppe is not None else list(ALL_PPE)
         self.supported_classes=set(str(x).strip().lower() for x in (supported_classes or []))
     def analyze(self,detections,poses=None):
         persons=[d for d in detections if d['className'].lower()=='person']
@@ -107,6 +111,6 @@ class SafetyAnalyzer:
                     side_info={'leftHand': 'unknown' if assigned[0] is None else 'normal' if assigned[0]>=0 else 'violation', 'rightHand':'unknown' if assigned[1] is None else 'normal' if assigned[1]>=0 else 'violation'}
                 record['ppe'][name]={'status':result,'reason':reason,'confidence':score,**side_info}
                 if result=='violation':
-                    violations.append({'trackId':person.get('trackId'),'personId':pid,'eventType':f'no_{name}','className':name,'confidence':person['confidence'],'message':f'人員 #{pid} 未正確穿戴{LABELS[name]}','bbox':box})
+                    violations.append({'trackId':person.get('trackId'),'personId':pid,'eventType':EVENT_TYPES[name],'className':name,'confidence':person['confidence'],'message':f'人員 #{pid} 未正確穿戴{LABELS[name]}','bbox':box})
             people.append(record)
         return {'people':people,'violations':violations}

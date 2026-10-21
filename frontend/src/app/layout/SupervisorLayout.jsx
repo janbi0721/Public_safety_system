@@ -76,7 +76,7 @@ export default function SupervisorLayout() {
   };
 
   const drawer = (
-    <Box sx={{ height: "100%", display: "flex", flexDirection: "column", bgcolor: "primary.main", color: "primary.contrastText" }}>
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "column", bgcolor: "hmi.nav", color: "hmi.navText" }}>
       <Stack direction="row" alignItems="center" spacing={1.2} sx={{ px: 2.25, minHeight: 64 }}>
         <ShieldOutlined />
         <Box>
@@ -106,8 +106,8 @@ export default function SupervisorLayout() {
                       borderRadius: 1.5,
                       mb: 0.4,
                       color: "inherit",
-                      "&.Mui-selected": { bgcolor: "rgba(255,255,255,.18)" },
-                      "&.Mui-selected:hover": { bgcolor: "rgba(255,255,255,.22)" },
+                      "&.Mui-selected": { bgcolor: "rgba(255,255,255,.12)", boxShadow: theme => `inset 3px 0 0 ${theme.palette.hmi.brand}` },
+                      "&.Mui-selected:hover": { bgcolor: "rgba(255,255,255,.16)" },
                       "&:hover": { bgcolor: "rgba(255,255,255,.10)" }
                     }}>
                     <ListItemIcon sx={{ minWidth: 38, color: "inherit" }}>{item.icon}</ListItemIcon>

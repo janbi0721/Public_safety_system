@@ -13,6 +13,9 @@ venv/
 backend/safety.db
 backend/safety.db-shm
 backend/safety.db-wal
+# Database backups and event snapshots may contain people's images
+backend/backups/
+backend/snapshots/
 
 # MediaMTX auto-generated TLS cert/key
 mediamtx/auto.key

@@ -5,6 +5,8 @@ from pathlib import Path
 
 from ultralytics import YOLO
 
+# BoT-SORT + appearance ReID so a briefly hidden person keeps the same trackId.
+PERSON_TRACKER = str(Path(__file__).resolve().parent / "trackers" / "person_botsort.yaml")
 
 class Detector:
     """Merge COCO-person tracks and PPE detections on the *same* BGR frame.
@@ -72,7 +74,7 @@ class Detector:
         if self.ppe_has_person:
             result = self.ppe_model.track(
                 source=frame, conf=self.ppe_confidence, imgsz=self.ppe_imgsz,
-                persist=True, tracker="bytetrack.yaml", verbose=False,
+                persist=True, tracker=PERSON_TRACKER, verbose=False,
             )[0]
             detections = self._parse_result(result)
             person_count = sum(d["className"].casefold() == "person" for d in detections)
@@ -81,7 +83,7 @@ class Detector:
             person_result = self.person_model.track(
                 source=frame, classes=[self.person_class_id],
                 conf=self.confidence, imgsz=self.imgsz, persist=True,
-                tracker="bytetrack.yaml", verbose=False,
+                tracker=PERSON_TRACKER, verbose=False,
             )[0]
             # Important: pass the ORIGINAL frame here, not person_result.plot()
             # and not a cropped/mutated frame. Both results use frame coordinates.

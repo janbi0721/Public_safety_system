@@ -40,7 +40,8 @@ const routes = [
       { path: "cameras", element: <Cameras /> }
     ]
   },
-  { path: "/engineering", element: <AuthGuard><RoleGuard roles={["engineer", "admin"]}><EngineeringLayout /></RoleGuard></AuthGuard>, children: [{ index: true, element: <EngineerMaintenance /> }] },
+  // Engineering mode is intentionally open without login; the backend allows it too.
+  { path: "/engineering", element: <EngineeringLayout />, children: [{ index: true, element: <EngineerMaintenance /> }] },
   { path: "/dashboard", element: <Navigate to="/supervisor/dashboard" replace /> },
   { path: "/monitor", element: <Navigate to="/supervisor/monitor" replace /> },
   { path: "/events", element: <Navigate to="/supervisor/events" replace /> },

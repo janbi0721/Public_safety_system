@@ -19,10 +19,13 @@ def validate_model_file(path):
 
 def backup_database():
     import sqlite3
+    from contextlib import closing
     from datetime import datetime,timezone
     source=BASE/'safety.db';dest=BASE/'backups';dest.mkdir(exist_ok=True)
     name=dest/f"safety_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.db"
-    with sqlite3.connect(source) as src,sqlite3.connect(name) as tgt:src.backup(tgt)
+    # sqlite3's own context manager only commits; close explicitly or Windows
+    # keeps the temp .db locked and unlink() below raises PermissionError.
+    with closing(sqlite3.connect(source)) as src,closing(sqlite3.connect(name)) as tgt:src.backup(tgt)
     from zipfile import ZipFile,ZIP_DEFLATED
     archive=dest/(name.stem+'.zip')
     with ZipFile(archive,'w',ZIP_DEFLATED,compresslevel=5) as z:

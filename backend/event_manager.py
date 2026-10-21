@@ -2,16 +2,30 @@ from __future__ import annotations
 from datetime import datetime,timezone
 import time
 from database import create_event,end_event_detection,update_event_last_seen
-from v2_data import set_close_reason
+from v2_data import link_event_person,set_close_reason
+from safety_analyzer import PPE_BY_EVENT
 
 def stamp(t):return datetime.fromtimestamp(t,tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 class EventManager:
-    def __init__(self,camera_id,trigger_seconds=1.5,recovery_seconds=2.0,occlusion_seconds=3.0,on_transition=None):
+    """One event per (person, PPE item), kept open until the state really changes.
+
+    - violation for trigger_seconds          -> open the event
+    - item seen worn for recovery_seconds    -> close, reason 'recovered'
+    - person out of view for occlusion_seconds -> close, reason 'left_camera'
+    - person visible but item not judgeable (turned away, hand hidden)
+      -> stays open; this never splits one violation into several events.
+    """
+    def __init__(self,camera_id,trigger_seconds=1.5,recovery_seconds=2.0,occlusion_seconds=30.0,on_transition=None):
         self.camera_id=camera_id;self.trigger_seconds=trigger_seconds
         self.recovery_seconds=recovery_seconds;self.occlusion_seconds=occlusion_seconds
         self.on_transition=on_transition
+        self.person_recorder=None  # set by the worker; links events and writes the person timeline
         self.pending={};self.active={};self.missing_since={};self.missing_reason={};self.last_violation={}
+    def reset(self):
+        """Forget open events, e.g. after engineering cleared the events table."""
+        self.pending.clear();self.active.clear();self.missing_since.clear()
+        self.missing_reason.clear();self.last_violation.clear()
     def process(self,violations,timestamp=None,people=None):
         t=time.time() if timestamp is None else timestamp
         people=people or []
@@ -30,18 +44,28 @@ class EventManager:
             if event_id is None:
                 event_id=create_event(camera_id=self.camera_id,track_id=v['trackId'],event_type=v['eventType'],class_name=v.get('className'),confidence=v.get('confidence'),message=v['message'],event_time=stamp(t))
                 self.active[key]=event_id
+                if self.person_recorder:
+                    session_id=self.person_recorder.session_id(v['trackId'])
+                    if session_id:link_event_person(event_id,session_id)
+                    self.person_recorder.mark(v['trackId'],PPE_BY_EVENT.get(v['eventType'],v['eventType']),'violation',since)
                 if self.on_transition:self.on_transition('start',event_id,t,v)
             else:update_event_last_seen(event_id,stamp(t))
-            alerts.append({**v,'eventId':event_id,'durationSeconds':round(t-since,2)})
-        # Only end after repeated visible normal, unknown pauses (does not imply compliance).
+            alerts.append({**v,'eventId':event_id,'durationSeconds':round(t-since,2),'inView':True})
         for key in set(self.pending)|set(self.active):
             if key in vmap:continue
             track_id,event_type=key
             person=person_map.get(track_id)
-            ppe=event_type.removeprefix('no_')
+            ppe=PPE_BY_EVENT.get(event_type,event_type.removeprefix('no_'))
             status=person.get('ppe',{}).get(ppe,{}).get('status','unknown') if person else 'unknown'
-            if status=='normal':delay=self.recovery_seconds;reason='recovered'
-            else:delay=self.occlusion_seconds;reason='tracking_lost' if person is None else 'unknown'
+            if key not in self.active:
+                # Not yet an event: an interrupted violation simply starts over.
+                reason='interrupted';delay=self.trigger_seconds
+            elif status=='normal':delay=self.recovery_seconds;reason='recovered'
+            elif person is None:delay=self.occlusion_seconds;reason='left_camera'
+            else:
+                # Still in view but this item cannot be judged right now: keep the event open.
+                self.missing_since.pop(key,None);self.missing_reason.pop(key,None)
+                continue
             if self.missing_reason.get(key)!=reason:
                 self.missing_since[key]=t
                 self.missing_reason[key]=reason
@@ -51,6 +75,15 @@ class EventManager:
             self.pending.pop(key,None);self.missing_since.pop(key,None);self.missing_reason.pop(key,None)
             if event_id is not None:
                 end_event_detection(event_id,stamp(t));set_close_reason(event_id,reason)
+                if reason=='recovered' and self.person_recorder:
+                    self.person_recorder.mark(track_id,ppe,'normal',first)
                 if self.on_transition:self.on_transition('end',event_id,t,self.last_violation.get(key,{}))
             self.last_violation.pop(key,None)
+        # Keep reporting every still-open event, so a one-frame flicker (turned away,
+        # briefly out of view) does not make the alert vanish and be announced again.
+        for key,event_id in self.active.items():
+            if key in vmap:continue
+            since=self.pending.get(key,t)
+            alerts.append({**self.last_violation.get(key,{}),'eventId':event_id,
+                'durationSeconds':round(t-since,2),'inView':key[0] in person_map})
         return alerts

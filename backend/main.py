@@ -15,6 +15,7 @@ from fastapi import (
     FastAPI,
     Header,
     HTTPException,
+    Query,
     Request,
     WebSocket,
     WebSocketDisconnect,
@@ -23,19 +24,20 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 import json, shutil, re
 from v2_data import get_settings,save_settings,event_statistics,init_v2_db,audit,list_snapshots,remove_snapshot,review_event
 from database import get_connection
 from gemini_service import ask_gemini
 from maintenance import backup_database,health_metrics
 from environment_config import list_environment,save_environment
-from v2_data import create_test_event,list_test_events,delete_test_event
-from engineering_database import catalog as engineering_db_catalog, browse as engineering_db_browse, create_row as engineering_db_create, update_row as engineering_db_update, delete_row as engineering_db_delete
-from snapshot_service import VIOLATION_KEY, HEX_COLOR, color_hex, default_color, set_box_colors
+from v2_data import create_test_event,list_test_events,delete_test_event,list_person_sessions,get_person_session
+from engineering_database import catalog as engineering_db_catalog, browse as engineering_db_browse, create_row as engineering_db_create, update_row as engineering_db_update, delete_row as engineering_db_delete, clear_event_data as engineering_db_clear_events
+from snapshot_service import VIOLATION_KEY, HEX_COLOR, ROOT as SNAPSHOT_ROOT, color_hex, default_color, set_box_colors
 
 from database import (
     count_active_supervisors,
+    count_events,
     create_session,
     create_supervisor,
     delete_session,
@@ -59,6 +61,7 @@ from schemas import EventImprovedUpdate, LoginRequest, SupervisorCreate, Supervi
 from state import DetectionState
 from multi_cameras import CameraManager,initialize_sources
 from worker import YoloWorker
+from event_manager import EventManager
 from yolo_obj_detector import Detector
 
 
@@ -181,7 +184,16 @@ def require_role(*allowed):
         return user
     return check
 
-engineer= require_role('engineer','admin')
+PUBLIC_ENGINEER={'id':None,'username':'engineering','display_name':'工程師（免登入）','role':'engineer'}
+
+def engineer(authorization: Annotated[str | None, Header()] = None):
+    # Engineering mode is deliberately open to every device without login
+    # (owner's decision). A logged-in engineer/admin is still recorded in audit logs.
+    if authorization and authorization.startswith('Bearer '):
+        user=get_supervisor_by_token(authorization[7:].strip())
+        if user and user.get('role') in ('engineer','admin'):return user
+    return PUBLIC_ENGINEER
+
 admin_only=require_role('admin')
 
 
@@ -307,16 +319,60 @@ def admin_events(
     offset: int = 0,
     camera_id: str | None = None,
     is_improved: bool | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    event_type: str | None = Query(None, max_length=48),
+    review_status: str | None = Query(None, pattern="^(pending|improved|false_positive)$"),
+    q: str | None = Query(None, max_length=80),
     _: dict = Depends(current_supervisor),
 ):
+    filters = dict(
+        camera_id=camera_id,
+        is_improved=is_improved,
+        start=_utc_text(start),
+        end=_utc_text(end),
+        event_type=event_type,
+        review_status=review_status,
+        keyword=q,
+    )
     return {
-        "events": get_events(
-            limit=limit,
-            offset=offset,
-            camera_id=camera_id,
-            is_improved=is_improved,
-        )
+        "events": get_events(limit=limit, offset=offset, **filters),
+        "total": count_events(**filters),
     }
+
+
+def _utc_text(value: datetime | None) -> str | None:
+    """Convert an ISO datetime from the browser to the UTC text format events use."""
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+@app.get("/api/admin/people")
+def admin_people(
+    limit: int = 50,
+    offset: int = 0,
+    camera_id: str | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    q: str | None = Query(None, max_length=80),
+    violated_only: bool = False,
+    _: dict = Depends(current_supervisor),
+):
+    return list_person_sessions(
+        limit=limit, offset=offset, camera_id=camera_id,
+        start=_utc_text(start), end=_utc_text(end), keyword=q, violated_only=violated_only,
+    )
+
+
+@app.get("/api/admin/people/{session_id}")
+def admin_person_detail(session_id: int, _: dict = Depends(current_supervisor)):
+    person = get_person_session(session_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="找不到這筆人員紀錄")
+    return person
 
 
 @app.get("/api/admin/events/{event_id}")
@@ -598,13 +654,16 @@ def reports(user:dict=Depends(current_supervisor)):
 def engineering_config(request:Request,_:dict=Depends(engineer)):
     mgr=getattr(request.app.state,'camera_manager',None)
     worker=next(iter(mgr.entries.values()))['worker'] if mgr and mgr.entries else None
-    return {'settings':get_settings(),'model':Path(worker.detector.ppe_model_path).name if worker else Path(PPE_MODEL).name,'classes':list(worker.detector.ppe_names.values()) if worker else [],'required_ppe':worker.analyzer.required_ppe if worker else REQUIRED_PPE,'pose_enabled':bool(worker and worker.pose)}
+    em=worker.event_manager if worker else EventManager('preview')
+    timing={'event_trigger_seconds':em.trigger_seconds,'recovery_seconds':em.recovery_seconds,'occlusion_seconds':em.occlusion_seconds}
+    return {'settings':get_settings(),'timing':timing,'model':Path(worker.detector.ppe_model_path).name if worker else Path(PPE_MODEL).name,'classes':list(worker.detector.ppe_names.values()) if worker else [],'required_ppe':worker.analyzer.required_ppe if worker else REQUIRED_PPE,'pose_enabled':bool(worker and worker.pose)}
 
 class EngineeringSettings(BaseModel):
     required_ppe:list[str]|None=None
     event_trigger_seconds:float|None=Field(None,ge=.5,le=20)
     recovery_seconds:float|None=Field(None,ge=.5,le=30)
-    occlusion_seconds:float|None=Field(None,ge=.5,le=30)
+    # How long a person must be out of view before their open event ends.
+    occlusion_seconds:float|None=Field(None,ge=5,le=600)
 
 @app.patch('/api/admin/engineering/config')
 def update_engineering(payload:EngineeringSettings,request:Request,user:dict=Depends(engineer)):
@@ -787,6 +846,20 @@ def engineering_database_delete(table:str,row_id:str,payload:EngineeringDatabase
     if not deleted: raise HTTPException(404,'找不到指定資料')
     audit(user['id'],'database_row_deleted',{'table':table,'row_id':row_id})
     return {'ok':True}
+
+class ClearEventsRequest(BaseModel):
+    confirm_text:str
+
+@app.post('/api/admin/engineering/clear-events')
+def engineering_clear_events(payload:ClearEventsRequest,request:Request,user:dict=Depends(engineer)):
+    if payload.confirm_text.strip()!='清空':raise HTTPException(400,'請輸入「清空」確認')
+    backup=Path(backup_database()).name
+    mgr=getattr(request.app.state,'camera_manager',None)
+    for e in list(mgr.entries.values()) if mgr else []:
+        e['worker'].event_manager.reset();e['worker'].person_recorder.reset();e['worker']._last_violation_frames.clear()
+    counts=engineering_db_clear_events(SNAPSHOT_ROOT)
+    audit(user['id'],'event_data_cleared',{**counts,'backup':backup})
+    return {'ok':True,'backup':backup,'deleted':counts}
 
 class CameraToggle(BaseModel):
     enabled:bool|None=None

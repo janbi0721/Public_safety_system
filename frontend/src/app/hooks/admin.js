@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "app/services/api";
 
-export function useEvents({ cameraId, limit = 100, isImproved, interval = 5000 } = {}) {
+export function useEvents({ cameraId, limit = 100, offset = 0, isImproved, filters, interval = 5000 } = {}) {
   const [events, setEvents] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Serialize so a new-but-equal filters object does not restart polling.
+  const filterKey = JSON.stringify(filters || {});
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api.adminEvents({ limit, cameraId, isImproved });
+      const data = await api.adminEvents({ limit, offset, cameraId, isImproved, ...JSON.parse(filterKey) });
       setEvents(data.events || []);
+      setTotal(data.total ?? (data.events || []).length);
       setError(null);
     } catch (err) {
       setError(err);
     } finally {
       setLoading(false);
     }
-  }, [cameraId, limit, isImproved]);
+  }, [cameraId, limit, offset, isImproved, filterKey]);
 
   useEffect(() => {
     refresh();
@@ -24,7 +28,7 @@ export function useEvents({ cameraId, limit = 100, isImproved, interval = 5000 }
     return () => timer && window.clearInterval(timer);
   }, [interval, refresh]);
 
-  return { events, loading, error, refresh };
+  return { events, total, loading, error, refresh };
 }
 
 export function useSupervisors() {

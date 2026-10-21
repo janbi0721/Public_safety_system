@@ -1,0 +1,24 @@
+# Person tracker: BoT-SORT with appearance re-identification (ReID).
+# Goal: keep the same trackId when a worker is briefly occluded or walks out
+# of view and comes back, so one person does not create duplicate events.
+tracker_type: botsort
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+new_track_thresh: 0.25
+# Frames a lost person is remembered for re-identification. At ~10 AI FPS,
+# 300 frames is about 30 s, matching the default "left camera" event timeout.
+track_buffer: 300
+match_thresh: 0.8
+fuse_score: True
+# Cameras are fixed, so global motion compensation only costs CPU.
+gmc_method: none
+# 0 = allow appearance matching anywhere in the frame (the stock 0.5 only
+# re-identifies people whose predicted box still overlaps), so a worker who
+# re-enters from another side can keep their ID.
+proximity_thresh: 0.0
+# Appearance must be very similar (embedding distance < 0.2) to merge tracks;
+# keeps two workers in identical uniforms from swapping IDs.
+appearance_thresh: 0.8
+with_reid: True
+# "auto" reuses the person detector's own features; no extra ReID model needed.
+model: auto

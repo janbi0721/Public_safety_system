@@ -17,8 +17,8 @@ from database import get_connection, utc_now
 TABLES = {
     'events': {
         'label': '異常事件紀錄', 'pk': 'id', 'editable': True,
-        'search': ('id', 'camera_id', 'event_type', 'message'),
-        'columns': ('id', 'camera_id', 'event_type', 'track_id', 'message',
+        'search': ('id', 'event_code', 'camera_id', 'event_type', 'message'),
+        'columns': ('id', 'event_code', 'camera_id', 'event_type', 'track_id', 'message',
                     'confidence', 'start_time', 'end_time', 'status', 'review_status', 'updated_at'),
         'fields': (
             ('camera_id', '攝影機 ID', 'text', True),
@@ -278,3 +278,23 @@ def delete_row(table: str, row_id: str) -> bool:
         except sqlite3.IntegrityError as error:
             raise ValueError('刪除失敗：其他資料仍參照這筆紀錄') from error
     return True
+
+
+def clear_event_data(snapshot_dir) -> dict:
+    """Delete all events, their snapshots (rows and JPEG files), person records and AI reports.
+
+    Accounts, cameras, settings, AI chats and audit logs are kept. The caller
+    is responsible for backing up first.
+    """
+    tables = ('event_snapshots', 'events', 'person_ppe_changes', 'person_sessions', 'safety_reports')
+    with get_connection() as conn:
+        counts = {name: conn.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0] for name in tables}
+        for name in tables:  # children first so foreign keys never block
+            conn.execute(f'DELETE FROM "{name}"')
+        # Restart internal numbering after a full clear.
+        conn.execute(f"DELETE FROM sqlite_sequence WHERE name IN ({','.join('?' * len(tables))})", tables)
+    files = 0
+    for path in snapshot_dir.glob('event_*.jpg') if snapshot_dir.is_dir() else []:
+        path.unlink(missing_ok=True)
+        files += 1
+    return {**counts, 'snapshot_files': files}

@@ -91,13 +91,29 @@ export const api = {
   me: () => request("/api/auth/me", { auth: true }),
   logout: () => request("/api/auth/logout", { method: "POST", auth: true }),
 
-  adminEvents: ({ limit = 100, offset = 0, cameraId, isImproved } = {}) => {
+  // start/end are ISO datetimes (end exclusive); the backend compares them in UTC.
+  adminEvents: ({ limit = 100, offset = 0, cameraId, isImproved, start, end, eventType, reviewStatus, q } = {}) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (cameraId) params.set("camera_id", cameraId);
     if (typeof isImproved === "boolean") params.set("is_improved", String(isImproved));
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    if (eventType) params.set("event_type", eventType);
+    if (reviewStatus) params.set("review_status", reviewStatus);
+    if (q && q.trim()) params.set("q", q.trim());
     return request(`/api/admin/events?${params}`, { auth: true });
   },
   adminEvent: (eventId) => request(`/api/admin/events/${eventId}`, { auth: true }),
+  adminPeople: ({ limit = 50, offset = 0, cameraId, start, end, q, violatedOnly } = {}) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (cameraId) params.set("camera_id", cameraId);
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    if (q && q.trim()) params.set("q", q.trim());
+    if (violatedOnly) params.set("violated_only", "true");
+    return request(`/api/admin/people?${params}`, { auth: true });
+  },
+  adminPerson: (sessionId) => request(`/api/admin/people/${sessionId}`, { auth: true }),
   setEventImproved: (eventId, isImproved) =>
     request(`/api/admin/events/${eventId}/improved`, {
       method: "PATCH",
@@ -147,6 +163,7 @@ export const api = {
   engineeringDatabaseDelete: (table, id) =>
     request(`/api/admin/engineering/database/${encodeURIComponent(table)}/${encodeURIComponent(id)}`, { method: 'DELETE', auth: true, body: { confirmed: true } }),
   backup: () => request('/api/admin/engineering/backup',{method:'POST',auth:true}),
+  clearEventData: (confirmText) => request('/api/admin/engineering/clear-events',{method:'POST',auth:true,body:{confirm_text:confirmText}}),
   auditLogs: () => request('/api/admin/engineering/audit',{auth:true})
 };
 

@@ -16,6 +16,7 @@ import PaletteOutlined from "@mui/icons-material/PaletteOutlined";
 import EngineeringDatabase from "./EngineeringDatabase";
 import { api, DEFAULT_CAMERA_ID } from "../services/api";
 import SystemStatus from "./SystemStatus";
+import { eventCode } from "./shared";
 
 const SECTIONS = [
   { id: "cameras", label: "攝影機管理", icon: <TuneOutlined /> },
@@ -29,6 +30,13 @@ const SECTIONS = [
   { id: "backup", label: "資料備份", icon: <BackupOutlined /> }
 ];
 const PPE_OPTIONS = [["helmet", "安全帽"], ["respirator", "防毒面具"], ["glove", "隔熱手套"]];
+// [key, label, min, max, step]; ranges must match EngineeringSettings in backend/main.py.
+const TIMING_FIELDS = [
+  ["event_trigger_seconds", "違規持續幾秒才建立事件", 0.5, 20, 0.5],
+  ["recovery_seconds", "戴好後持續幾秒才結束事件", 0.5, 30, 0.5],
+  ["occlusion_seconds", "離開鏡頭幾秒才結束事件", 5, 600, 5]
+];
+const timingValid = timing => TIMING_FIELDS.every(([key, , min, max]) => Number.isFinite(timing[key]) && timing[key] >= min && timing[key] <= max);
 const TEST_TYPES = [
   ["no_helmet", "未戴安全帽"], ["no_gas_mask", "未戴防毒面具"],
   ["no_gloves", "未戴隔熱手套"], ["fall_detected", "模擬跌倒"]
@@ -236,10 +244,11 @@ function TestEvents({ notify }) {
     try {
       const result = await api.createTestEvent({ event_type: type, camera_id: cameraId,
         note: note.trim(), track_id: trackId ? Number(trackId) : null, resolved });
-      // Read back from the regular supervisor API to confirm SQLite persistence.
-      const saved = await api.adminEvent(result.event_id);
-      if (!saved || Number(saved.id) !== Number(result.event_id)) throw new Error('寫入後無法在事件資料庫查到這筆紀錄');
-      notify(`已新增事件 #${result.event_id}，可在主管事件管理與統計中查看`, "success");
+      // Read back through the engineering list (no supervisor login needed) to confirm SQLite persistence.
+      const saved = (await api.listTestEvents()).events || [];
+      const created = saved.find(event => Number(event.id) === Number(result.event_id));
+      if (!created) throw new Error('寫入後無法在事件資料庫查到這筆紀錄');
+      notify(`已新增事件 ${eventCode(created)}，可在主管事件管理與統計中查看`, "success");
       await refresh();
     } catch (error) { setError(error.message || "新增模擬事件失敗，請確認後端日誌"); }
     finally { setBusy(false); }
@@ -290,7 +299,7 @@ function TestEvents({ notify }) {
           <Stack direction={{ xs: "column", sm: "row" }} alignItems={{ sm: "center" }} justifyContent="space-between" py={1} gap={1}>
             <Box>
               <Stack direction="row" spacing={1} alignItems="center">
-                <Typography fontWeight={700}>#{item.id}</Typography>
+                <Typography fontWeight={700} sx={{ fontFamily: "monospace" }}>{eventCode(item)}</Typography>
                 <Typography variant="body2">{TEST_TYPES.find(x => x[0] === item.event_type)?.[1] || item.event_type}</Typography>
               </Stack>
               <Typography variant="caption" color="text.secondary">{item.camera_id} · {item.start_time} UTC</Typography>
@@ -309,7 +318,7 @@ export default function EngineerMaintenance() {
   const [section, setSection] = useState("recognition");
   const [info, setInfo] = useState(null);
   const [required, setRequired] = useState([]);
-  const [threshold, setThreshold] = useState(1.5);
+  const [timing, setTiming] = useState({ event_trigger_seconds: 1.5, recovery_seconds: 2, occlusion_seconds: 30 });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -320,14 +329,14 @@ export default function EngineerMaintenance() {
       if (!alive()) return;
       setInfo(response);
       setRequired(Array.isArray(response?.required_ppe) ? response.required_ppe : []);
-      setThreshold(Number(response?.settings?.event_trigger_seconds ?? 1.5));
+      setTiming(old => Object.fromEntries(Object.keys(old).map(key => [key, Number(response?.timing?.[key] ?? old[key])])));
     } catch (err) { if (alive()) setError(err.message || "工程師維護設定載入失敗"); }
   };
   useEffect(() => { let alive = true; void load(() => alive); return () => { alive = false; }; }, []);
   const saveRecognition = async () => {
     if (!window.confirm("確定修改辨識設定？")) return;
     setBusy(true); setError("");
-    try { await api.setEngineering({ required_ppe: required, event_trigger_seconds: threshold }); notify("辨識設定已儲存"); await load(); }
+    try { await api.setEngineering({ required_ppe: required, ...timing }); notify("辨識設定已儲存"); await load(); }
     catch (err) { setError(err.message); }
     finally { setBusy(false); }
   };
@@ -370,9 +379,14 @@ export default function EngineerMaintenance() {
               {PPE_OPTIONS.map(([id, label]) => <FormControlLabel key={id} label={label} control={<Checkbox checked={required.includes(id)}
                 onChange={event => setRequired(old => event.target.checked ? [...new Set([...old, id])] : old.filter(value => value !== id))} />} />)}
             </Stack>
-            <TextField sx={{ display: "block", my: 2 }} size="small" type="number" label="違規確認秒數" value={threshold}
-              inputProps={{ min: 0.5, max: 20, step: 0.5 }} onChange={event => setThreshold(Number(event.target.value))} />
-            <Button variant="contained" disabled={busy || !info || threshold < 0.5 || threshold > 20 || !Number.isFinite(threshold)} onClick={() => void saveRecognition()}>儲存辨識設定</Button>
+            <Typography variant="body2" color="text.secondary" mt={2}>
+              同一人同一項未戴好只會有一筆事件，直到戴好或離開鏡頭才結束；轉身、手被擋住等暫時看不清楚不會結束事件。
+            </Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} gap={2} my={2}>
+              {TIMING_FIELDS.map(([key, label, min, max, step]) => <TextField key={key} size="small" type="number" label={label} value={timing[key]}
+                inputProps={{ min, max, step }} onChange={event => setTiming(old => ({ ...old, [key]: Number(event.target.value) }))} />)}
+            </Stack>
+            <Button variant="contained" disabled={busy || !info || !timingValid(timing)} onClick={() => void saveRecognition()}>儲存辨識設定</Button>
           </CardContent></Card>
         </Stack>}
         {section === "cameras" && <EngineeringCameras notify={notify} />}

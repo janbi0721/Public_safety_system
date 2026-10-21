@@ -17,7 +17,7 @@ import { useCameraDetections } from "app/hooks/camera";
 import { useEvents } from "app/hooks/admin";
 import {useAvailableCameras} from "app/hooks/availableCameras";
 import {FormControl,InputLabel,Select,MenuItem,Alert} from "@mui/material";
-import { eventLabel, formatUtcDate } from "./shared";
+import { eventCode, eventLabel, formatUtcDate } from "./shared";
 
 function StatCard({ title, value, subtitle, icon, color = "primary.main" }) {
   return (
@@ -81,7 +81,7 @@ export default function Dashboard() {
                     <Box key={event.id || index}>
                       <ListItem disableGutters>
                         <ListItemText
-                          primary={`#${event.id} ${eventLabel(event.event_type)}`}
+                          primary={`${eventCode(event)} ${eventLabel(event.event_type)}`}
                           secondary={`${event.camera_id} · ${formatUtcDate(event.start_time)}`}
                           primaryTypographyProps={{ fontWeight: 600, fontSize: 14 }}
                           secondaryTypographyProps={{ fontSize: 12 }}

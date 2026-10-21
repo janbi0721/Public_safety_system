@@ -16,7 +16,7 @@ import Typography from "@mui/material/Typography";
 
 import CameraView from "app/components/CameraView";
 import { useCameraDetections } from "app/hooks/camera";
-import { DEFAULT_CAMERA_ID } from "app/services/api";
+import { AlarmBanner, alarmFrameSx, describePerson, groupAlertsByPerson, useAlarmTitle } from "app/components/SafetyAlarm";
 
 function ppeText(ppe = {}) {
   const labels = {
@@ -35,6 +35,8 @@ export default function LiveMonitor() {
   const {cameras,selected,setSelected}=useAvailableCameras();
   const [annotated,setAnnotated]=useState(true);
   const { detections, people = [], alerts = [], timestamp, frame } = useCameraDetections(selected);
+  const alertPeople = groupAlertsByPerson(alerts);
+  useAlarmTitle(alertPeople.length);
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
@@ -45,9 +47,10 @@ export default function LiveMonitor() {
       <FormControl size="small" sx={{minWidth:240,mb:2,display:'block'}}><InputLabel>選擇攝影機</InputLabel><Select value={selected} label="選擇攝影機" onChange={e=>setSelected(e.target.value)}>{cameras.map(c=><MenuItem key={c.camera_id} value={c.camera_id}>{c.name}</MenuItem>)}</Select></FormControl>
       {!selected&&<Alert severity="info" sx={{mb:2}}>目前沒有已啟用且連線成功的攝影機</Alert>}
       <Button size="small" variant="outlined" onClick={()=>setAnnotated(v=>!v)} sx={{mb:2}}>{annotated?"切換原始畫面":"切換 AI 畫面"}</Button>
+      <AlarmBanner alerts={alerts} />
       {selected&&<Grid container spacing={2.5}>
         <Grid size={{ xs: 12, xl: 9 }}>
-          <Card variant="outlined"><CardContent><CameraView cameraId={selected} detections={detections} alerts={alerts} frame={frame} annotated={annotated} /></CardContent></Card>
+          <Card variant="outlined" sx={alarmFrameSx(alertPeople.length > 0)}><CardContent><CameraView cameraId={selected} detections={detections} alerts={alerts} frame={frame} annotated={annotated} /></CardContent></Card>
         </Grid>
 
         <Grid size={{ xs: 12, xl: 3 }}>
@@ -59,12 +62,13 @@ export default function LiveMonitor() {
                   {timestamp ? new Date(timestamp * 1000).toLocaleTimeString("zh-TW") : "等待資料"}
                 </Typography>
                 <Stack spacing={1} mt={2}>
-                  {alerts.map((alert, index) => (
-                    <Box key={alert.eventId ?? index} sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "error.lighter", border: "1px solid", borderColor: "error.light" }}>
-                      <Typography variant="body2" fontWeight={700}>{alert.message}</Typography>
+                  {alertPeople.map(group => (
+                    <Box key={String(group.trackId)} sx={{ p: 1.25, borderRadius: 1.5, border: "2px solid", borderColor: "error.main" }}>
+                      <Typography variant="body2" fontWeight={800} color="error.main">{describePerson(group)}</Typography>
+                      {!group.inView && <Typography variant="caption" color="text.secondary">暫時不在畫面</Typography>}
                     </Box>
                   ))}
-                  {alerts.length === 0 && <Typography color="text.secondary" variant="body2">目前無安全警示</Typography>}
+                  {alertPeople.length === 0 && <Typography color="text.secondary" variant="body2">目前無安全警示</Typography>}
                 </Stack>
               </CardContent>
             </Card>

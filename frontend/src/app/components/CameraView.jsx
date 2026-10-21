@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import DetectionOverlay from "./DetectionOverlay";
-import { cameraWhepUrl, API_BASE_URL, DEFAULT_STREAM_NAME } from "app/services/api";
+import { cameraWhepUrl, API_BASE_URL } from "app/services/api";
 
 function waitForIceGathering(pc) {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
@@ -24,6 +23,7 @@ function WhepVideo({ url, cameraId, annotated }) {
 
   useEffect(() => {
     let disposed = false;
+    const video = videoRef.current;
     let pc;
     let sessionUrl;
     let timeout = window.setTimeout(()=>{if(!disposed)setFallback(true)},5000);
@@ -78,7 +78,7 @@ function WhepVideo({ url, cameraId, annotated }) {
     return () => {
       disposed = true;
       window.clearTimeout(timeout);
-      if (videoRef.current) videoRef.current.srcObject = null;
+      if (video) video.srcObject = null;
       if (pc) pc.close();
       if (sessionUrl) fetch(sessionUrl, { method: "DELETE" }).catch(() => {});
     };
@@ -97,16 +97,18 @@ export default function CameraView({
   cameraId = "camera-01",
   streamName,
   detections = [],
-  alerts = [],
   frame = null,
   showHeader = true,
-  annotated = true
+  annotated = true,
+  // fill: take the parent's full height instead of sizing by aspect ratio (single-screen layouts).
+  fill = false,
+  children
 }) {
   streamName = streamName || cameraId.replace(/-/g, "");
   const aspectRatio = frame?.width && frame?.height ? `${frame.width} / ${frame.height}` : "16 / 9";
 
   return (
-    <Box>
+    <Box sx={fill ? { height: "100%", display: "flex", flexDirection: "column", minHeight: 0 } : undefined}>
       {showHeader && (
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5} gap={1}>
           <Typography variant="subtitle1" fontWeight={600} noWrap>{cameraId}</Typography>
@@ -115,8 +117,10 @@ export default function CameraView({
           </Typography>
         </Stack>
       )}
-      <Box sx={{ position: "relative", aspectRatio, overflow: "hidden", borderRadius: 2, bgcolor: "#07111f", border: "1px solid", borderColor: "divider" }}>
+      <Box sx={{ position: "relative", overflow: "hidden", bgcolor: "#07111f",
+        ...(fill ? { flex: 1, minHeight: 0 } : { aspectRatio, borderRadius: 2, border: "1px solid", borderColor: "divider" }) }}>
         <WhepVideo url={cameraWhepUrl(annotated ? `${streamName}_ai` : streamName)} cameraId={cameraId} annotated={annotated} />
+        {children}
       </Box>
     </Box>
   );
