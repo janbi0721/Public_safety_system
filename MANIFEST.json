@@ -1,0 +1,12 @@
+{
+  "source": "user uploaded ZIP",
+  "version": "2.0 draft",
+  "files": 77,
+  "excluded_secrets": [
+    ".env",
+    "backend/safety.db*",
+    "mediamtx/auto.key",
+    "mediamtx/auto.crt"
+  ],
+  "testing": "12 automated backend tests passed; React build and field hardware not verified"
+}

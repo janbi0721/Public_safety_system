@@ -1,12 +1,17 @@
 import { Navigate, useLocation } from "react-router-dom";
-// HOOK
-import useAuth from "app/hooks/useAuth";
+import { useAuth } from "./SupervisorAuth";
 
 export default function AuthGuard({ children }) {
   const { isAuthenticated } = useAuth();
-  const { pathname } = useLocation();
+  const location = useLocation();
 
-  if (isAuthenticated) return <>{children}</>;
+  if (isAuthenticated) return children;
 
-  return <Navigate replace to="/session/signin" state={{ from: pathname }} />;
+  return (
+    <Navigate
+      replace
+      to="/supervisor/login"
+      state={{ from: `${location.pathname}${location.search}` }}
+    />
+  );
 }

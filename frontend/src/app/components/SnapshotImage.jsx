@@ -1,0 +1,2 @@
+import {useEffect,useState} from 'react';import {Box,Typography} from '@mui/material';import {authorizedImage} from '../services/api';
+export default function SnapshotImage({id}){const [url,setUrl]=useState(null);useEffect(()=>{let active=true,u=null;authorizedImage(id).then(x=>{u=x;if(active)setUrl(x);else URL.revokeObjectURL(x)}).catch(()=>{});return()=>{active=false;if(u)URL.revokeObjectURL(u)}},[id]);return url?<Box component="img" src={url} sx={{maxWidth:'100%',maxHeight:240,objectFit:'contain'}}/>:<Typography color="text.secondary">載入中</Typography>}

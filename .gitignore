@@ -1,0 +1,23 @@
+# Secrets / local config
+.env
+.env.local
+frontend/.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Runtime data
+backend/safety.db
+backend/safety.db-shm
+backend/safety.db-wal
+
+# MediaMTX auto-generated TLS cert/key
+mediamtx/auto.key
+mediamtx/auto.crt
+
+# Node
+node_modules/
+frontend/dist/

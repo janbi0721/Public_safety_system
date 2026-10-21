@@ -1,0 +1,1 @@
+import {Navigate} from 'react-router-dom';import {useAuth} from './SupervisorAuth';export default function RoleGuard({roles,children}){const {user}=useAuth();return roles.includes(user?.role)?children:<Navigate to="/supervisor/dashboard" replace/>}

@@ -1,0 +1,2 @@
+import {TextField,MenuItem} from '@mui/material';import {useThemeMode} from '../ThemeMode';
+export default function ModeSelect(){const {choice,change}=useThemeMode();return <TextField size="small" select value={choice} onChange={e=>change(e.target.value)} label="主題" sx={{minWidth:115}}><MenuItem value="light">淺色</MenuItem><MenuItem value="dark">深色</MenuItem><MenuItem value="system">跟隨系統</MenuItem></TextField>}

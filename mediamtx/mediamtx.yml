@@ -878,8 +878,14 @@ pathDefaults:
 # for example "~^prefix" will match all paths that start with "prefix".
 paths:
   camera01:
-    source: rtsp://admin:admin@192.168.50.168
-    #source: rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1
+    source: publisher
     #測試用的rtsp專用
     #rtspTransport: tcp
+    #筆電攝影機測試
+  laptop:
+      source: publisher
+  camera01_ai:
+    source: publisher
+  camera02_ai:
+    source: publisher
   all_others:
