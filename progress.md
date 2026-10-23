@@ -9,15 +9,7 @@
 - 2026-10-23 下午：修好之前的 5 個 bug，並查出「其他裝置連線很久」的原因（見下方「其他裝置連線慢」）。
 - 傍晚做了全面檢查，修了 17 個問題，見「2026-10-23 全面檢查」。另有 9 個要使用者決定。
 - 使用者 3:13 左右自己用 `open.bat` 跑過一次（事件 190–192 是那次產生的，不是 Claude 的測試）。
-- GitHub 最後一次 commit 是 `d22340c`。之後的修改都還沒 commit：
-  - 帳號對話（`backend/messaging.py`、`pages/Messages.jsx`）
-  - 穩定編號（`backend/stable_identity.py`）
-  - UI 整理：`PageHeader.jsx`、刪除 `Settings.jsx`、主題元件樣式
-  - 系統狀態頁改成每台攝影機分開檢查
-  - 攝影機一律顯示「攝影機 01」
-  - 拿掉說明文字
-  - 流程圖頁面 `docs/system-flowchart.html`
-  - 5 個 bug 的修正、`open.bat` 改用打包版、`vite.config.js` 修 build 崩潰、`index.html` 拿掉 Google 字型
+- 2026-10-23 傍晚：所有修改 commit 成 `905b629`，在分支 `fix/stability-review-1023`（從 `main` 的 `d22340c` 分出），**還沒合併回 `main`、還沒推上 GitHub**。
 - commit 時不要包含：`backend/model/best.pt`（使用者自己訓練）、`.env`、`.claude/`、`tools/`。
 
 ## 已完成（依時間）
@@ -158,7 +150,7 @@ FP16 推論測過：三個模型都只快 0～0.4ms，沒有採用。
 
 1. 使用者用 `open.bat` 重新啟動，再用手機或其他電腦開網頁，確認變快了；如果還是慢，問清楚是哪個部分慢。
 2. 用真人在攝影機前走出去再回來，實測穩定編號和事件延續（含 bug 3 的修正）。
-3. commit 並推上 GitHub（排除 `best.pt`、`.env`、`.claude/`、`tools/`、`frontend/dist/`）。
+3. 把 `fix/stability-review-1023` 合併回 `main`（可以 fast-forward）並推上 GitHub。
 4. 排查攝影機 02 的 RTSP 連線，可以用 `tools/ffmpeg/.../ffprobe.exe` 測網址。
 5. 用 `diagnose_models.py --ppe-imgsz 640/960` 比較小物件的辨識效果，決定 `PPE_IMGSZ`。
 6. 使用者要自己處理的：
