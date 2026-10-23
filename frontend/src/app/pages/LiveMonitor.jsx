@@ -1,7 +1,8 @@
 import {useState} from "react";
-import {FormControl,InputLabel,Select,MenuItem,Alert} from "@mui/material";
+import {FormControl,InputLabel,Select,MenuItem,ToggleButton,ToggleButtonGroup} from "@mui/material";
 import {useAvailableCameras} from "app/hooks/availableCameras";
-import {Button} from "@mui/material";
+import PageHeader, { Page } from "app/components/PageHeader";
+import { cameraLabel } from "./shared";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -39,18 +40,19 @@ export default function LiveMonitor() {
   useAlarmTitle(alertPeople.length);
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
-      <Stack mb={3}>
-        <Typography variant="h5" fontWeight={700}>即時監控</Typography>
-      </Stack>
-
-      <FormControl size="small" sx={{minWidth:240,mb:2,display:'block'}}><InputLabel>選擇攝影機</InputLabel><Select value={selected} label="選擇攝影機" onChange={e=>setSelected(e.target.value)}>{cameras.map(c=><MenuItem key={c.camera_id} value={c.camera_id}>{c.name}</MenuItem>)}</Select></FormControl>
-      {!selected&&<Alert severity="info" sx={{mb:2}}>目前沒有已啟用且連線成功的攝影機</Alert>}
-      <Button size="small" variant="outlined" onClick={()=>setAnnotated(v=>!v)} sx={{mb:2}}>{annotated?"切換原始畫面":"切換 AI 畫面"}</Button>
+    <Page>
+      <PageHeader title="即時監控" actions={<>
+        <FormControl size="small" sx={{minWidth:200}}><InputLabel>攝影機</InputLabel><Select value={selected} label="攝影機" onChange={e=>setSelected(e.target.value)}>{cameras.map(c=><MenuItem key={c.camera_id} value={c.camera_id}>{cameraLabel(c.camera_id)}</MenuItem>)}</Select></FormControl>
+        <ToggleButtonGroup size="small" exclusive value={annotated ? "ai" : "raw"} onChange={(_, value) => value && setAnnotated(value === "ai")} aria-label="畫面">
+          <ToggleButton value="ai">AI 畫面</ToggleButton>
+          <ToggleButton value="raw">原始畫面</ToggleButton>
+        </ToggleButtonGroup>
+      </>} />
+      {!selected&&<Typography color="text.secondary" sx={{ py: 6, textAlign: "center" }}>沒有連線中的攝影機</Typography>}
       <AlarmBanner alerts={alerts} />
       {selected&&<Grid container spacing={2.5}>
         <Grid size={{ xs: 12, xl: 9 }}>
-          <Card variant="outlined" sx={alarmFrameSx(alertPeople.length > 0)}><CardContent><CameraView cameraId={selected} detections={detections} alerts={alerts} frame={frame} annotated={annotated} /></CardContent></Card>
+          <Card variant="outlined" sx={alarmFrameSx(alertPeople.length > 0)}><CardContent><CameraView cameraId={selected} detections={detections} alerts={alerts} frame={frame} annotated={annotated} showHeader={false} /></CardContent></Card>
         </Grid>
 
         <Grid size={{ xs: 12, xl: 3 }}>
@@ -98,6 +100,6 @@ export default function LiveMonitor() {
           </Stack>
         </Grid>
       </Grid>}
-    </Box>
+    </Page>
   );
 }

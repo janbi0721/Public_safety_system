@@ -22,9 +22,6 @@ export default function Landing() {
             <ShieldOutlined fontSize="large" />
           </Box>
           <Typography variant="h3" fontWeight={800}>工安智慧監控</Typography>
-          <Typography color="text.secondary" maxWidth={640}>
-            請選擇使用模式
-          </Typography>
         </Stack>
 
         <Grid container spacing={3}>
@@ -32,10 +29,7 @@ export default function Landing() {
             <Card variant="outlined" sx={{ height: "100%", p: 2 }}>
               <CardContent>
                 <MonitorHeartOutlined color="primary" sx={{ fontSize: 48 }} />
-                <Typography variant="h5" fontWeight={700} mt={2}>顯示視訊以及警示訊息</Typography>
-                <Typography color="text.secondary" mt={1} mb={3}>
-                  不需登入。顯示即時鏡頭、AI 辨識框，以及未正確穿戴裝備時的即時警示。
-                </Typography>
+                <Typography variant="h5" fontWeight={700} mt={2} mb={3}>即時監控</Typography>
                 <Button variant="contained" fullWidth onClick={() => navigate("/client/monitor")}>進入即時監控</Button>
               </CardContent>
             </Card>
@@ -45,10 +39,7 @@ export default function Landing() {
             <Card variant="outlined" sx={{ height: "100%", p: 2 }}>
               <CardContent>
                 <AdminPanelSettingsOutlined color="primary" sx={{ fontSize: 48 }} />
-                <Typography variant="h5" fontWeight={700} mt={2}>管理</Typography>
-                <Typography color="text.secondary" mt={1} mb={3}>
-                  可查看監控、異常事件、改善狀態，以及新增、修改與刪除主管帳號。
-                </Typography>
+                <Typography variant="h5" fontWeight={700} mt={2} mb={3}>主管管理</Typography>
                 <Button variant="outlined" fullWidth onClick={() => navigate("/supervisor/login")}>主管登入</Button>
               </CardContent>
             </Card>

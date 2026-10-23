@@ -106,7 +106,7 @@ def test_simulated_event_included_in_normal_workflow_and_safe_deletion(client):
 
 def test_allowlist_secret_and_preserve_user_env(client,monkeypatch,tmp_path):
     env=tmp_path/'.env'
-    env.write_text('CAMERA_SOURCE=0\nUNRELATED=unchanged\nGEMINI_API_KEY=actualsecretkey1234\n'
+    env.write_text('AI_PUBLISH_URL=rtsp://127.0.0.1:8554/camera01_ai\nUNRELATED=unchanged\nGEMINI_API_KEY=actualsecretkey1234\n'
                    'OTHER_PPE_MODEL=do_not_change\n# do not touch this comment\n',encoding='utf-8')
     monkeypatch.setattr(environment_config,'ENV_PATH',env)
     admin=headers(client)
@@ -118,14 +118,17 @@ def test_allowlist_secret_and_preserve_user_env(client,monkeypatch,tmp_path):
     assert fields['GEMINI_API_KEY']['configured'] is True
     assert 'INITIAL_ADMIN_PASSWORD' not in fields and 'PPE_MODEL' not in fields
     assert client.patch('/api/admin/engineering/environment',headers=admin,json={'changes':{'INITIAL_ADMIN_PASSWORD':'x'}}).status_code==422
-    changed=client.patch('/api/admin/engineering/environment',headers=admin,json={'changes':{'CAMERA_SOURCE':'rtsp://user:pass@127.0.0.1:8554/live'}})
+    changed=client.patch('/api/admin/engineering/environment',headers=admin,json={'changes':{'AI_PUBLISH_URL':'rtsp://user:pass@127.0.0.1:8554/live'}})
     assert changed.status_code==200,changed.text
     assert 'UNRELATED=unchanged' in env.read_text()
     assert 'actualsecretkey1234' in env.read_text()
     fields={field['name']:field for field in client.get('/api/admin/engineering/environment',headers=admin).json()['fields']}
-    assert fields['CAMERA_SOURCE']['protected'] is True
-    assert fields['CAMERA_SOURCE']['value']==''
-    assert client.patch('/api/admin/engineering/environment',headers=admin,json={'changes':{'CAMERA_SOURCE':'0\nPPE_MODEL=evil'}}).status_code==422
+    assert fields['AI_PUBLISH_URL']['protected'] is True
+    assert fields['AI_PUBLISH_URL']['value']==''
+    assert client.patch('/api/admin/engineering/environment',headers=admin,json={'changes':{'AI_PUBLISH_URL':'rtsp://x\nPPE_MODEL=evil'}}).status_code==422
+    # Camera sources live in the database; .env keys that would have no effect are not editable.
+    assert not {'CAMERA_ID','CAMERA_SOURCE','VITE_MEDIAMTX_STREAM'} & set(fields)
+    assert client.patch('/api/admin/engineering/environment',headers=admin,json={'changes':{'CAMERA_SOURCE':'1'}}).status_code==422
     assert 'PPE_MODEL=evil' not in env.read_text()
 
 

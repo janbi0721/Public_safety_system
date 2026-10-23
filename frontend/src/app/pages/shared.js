@@ -21,7 +21,14 @@ export function eventCode(event) {
   return event?.event_code || (event?.id != null ? `#${event.id}` : "—");
 }
 
-export const PPE_LABELS = { helmet: "安全帽", respirator: "防毒面具", glove: "手套" };
+// Cameras are shown by number only, e.g. camera-01 -> 攝影機 01 (user's choice;
+// the stored display names such as 筆電攝影機 are no longer shown).
+export function cameraLabel(cameraId) {
+  if (!cameraId) return "—";
+  return `攝影機 ${String(cameraId).replace(/^camera-?/i, "")}`;
+}
+
+export const PPE_LABELS ={ helmet: "安全帽", respirator: "防毒面具", glove: "手套" };
 
 export function personEndLabel(reason) {
   const labels = { left_camera: "離開鏡頭", system_stopped: "系統關閉", system_restart: "系統重新啟動" };
@@ -42,7 +49,10 @@ export function closeReasonLabel(reason) {
     left_camera: "人員離開鏡頭",
     tracking_lost: "追蹤中斷（舊版規則）",
     unknown: "無法判定（舊版規則）",
-    test_finished: "手動結束"
+    test_finished: "手動結束",
+    manual_end: "手動結束",
+    system_stopped: "系統關閉",
+    system_restart: "系統重新啟動"
   };
   return labels[reason] || reason || "—";
 }

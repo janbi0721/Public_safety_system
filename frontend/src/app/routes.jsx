@@ -13,8 +13,8 @@ import Analytics from "./pages/Analytics";
 import AiSafetyManager from "./pages/AiSafetyManager";
 import EngineerMaintenance from "./pages/EngineerMaintenance";
 import EngineeringLayout from "./layout/EngineeringLayout";
-import Settings from "./pages/Settings";
 import RoleGuard from "./auth/RoleGuard";
+import Messages from "./pages/Messages";
 
 const routes = [
   { path: "/", element: <Landing /> },
@@ -36,7 +36,9 @@ const routes = [
       { path: "supervisors", element: <RoleGuard roles={["admin"]}><Supervisors /></RoleGuard> },
       { path: "analytics", element: <Analytics /> },
       { path: "ai", element: <AiSafetyManager /> },
-      { path: "settings", element: <Settings /> },
+      // The theme switch lives in the top bar; old bookmarks to settings go home.
+      { path: "settings", element: <Navigate to="/supervisor/dashboard" replace /> },
+      { path: "messages", element: <Messages /> },
       { path: "cameras", element: <Cameras /> }
     ]
   },

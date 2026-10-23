@@ -26,6 +26,7 @@ import KeyOutlined from "@mui/icons-material/KeyOutlined";
 import { useAuth } from "app/auth/SupervisorAuth";
 import { useSupervisors } from "app/hooks/admin";
 import { api } from "app/services/api";
+import PageHeader, { Page } from "app/components/PageHeader";
 import { formatUtcDate } from "./shared";
 
 const emptyCreate = { username: "", display_name: "", password: "",role:"supervisor" };
@@ -90,14 +91,9 @@ export default function Supervisors() {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
-      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={2} mb={3}>
-        <Box>
-          <Typography variant="h5" fontWeight={700}>帳號管理</Typography>
-          
-        </Box>
-        <Button variant="contained" startIcon={<AddOutlined />} onClick={() => setCreateOpen(true)}>新增管理者</Button>
-      </Stack>
+    <Page>
+      <PageHeader title="帳號管理" meta={`共 ${supervisors.length} 個帳號`}
+        actions={<Button variant="contained" startIcon={<AddOutlined />} onClick={() => setCreateOpen(true)}>新增帳號</Button>} />
 
       {(actionError || error) && <Alert severity="error" sx={{ mb: 2 }}>{actionError || error?.message}</Alert>}
 
@@ -203,6 +199,6 @@ export default function Supervisors() {
           <Button color="error" variant="contained" onClick={deleteSupervisor} disabled={busy}>刪除</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </Page>
   );
 }

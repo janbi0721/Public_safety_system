@@ -15,8 +15,15 @@ start "SafetyV2-MediaMTX" /D "%ROOT%mediamtx" cmd.exe /k "title SafetyV2-MediaMT
 timeout /t 2 /nobreak >nul
 start "SafetyV2-FastAPI" /D "%ROOT%backend" cmd.exe /k "title SafetyV2-FastAPI & python -m uvicorn main:app --host 0.0.0.0 --port 8000"
 timeout /t 2 /nobreak >nul
-start "SafetyV2-Frontend" /D "%ROOT%frontend" cmd.exe /k "title SafetyV2-Frontend & npm.cmd run dev -- --host 0.0.0.0"
-timeout /t 5 /nobreak >nul
+rem Other devices load the packed build (one gzip file) much faster than the dev
+rem server (200+ unpacked modules). If the build fails, fall back to dev mode.
+start "SafetyV2-Frontend" /D "%ROOT%frontend" cmd.exe /k "title SafetyV2-Frontend & npm.cmd run build & if errorlevel 1 (echo Build failed, using dev server & npm.cmd run dev -- --host 0.0.0.0 --port 5173) else (npm.cmd run preview -- --host 0.0.0.0 --port 5173 --strictPort)"
+set /a WAITED=0
+:wait_frontend
+timeout /t 1 /nobreak >nul
+set /a WAITED+=1
+netstat -an | find ":5173 " | find "LISTENING" >nul
+if errorlevel 1 if %WAITED% LSS 90 goto wait_frontend
 start "" "http://localhost:5173"
 exit /b 0
 

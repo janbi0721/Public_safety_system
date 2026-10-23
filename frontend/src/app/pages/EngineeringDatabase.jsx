@@ -81,12 +81,6 @@ function EditDialog({ open, table, row, onClose, onSaved }) {
             inputProps={field.type === "decimal" ? { min: 0, max: 1, step: 0.01 } : undefined}
             onChange={event => setValues(old => ({ ...old, [field.name]: event.target.value }))} />;
         })}
-        {table?.name === "cameras" && <Alert severity="info">
-          此處修改 SQLite 的攝影機資料，不會即時新增 RTSP 擷取程序；影像來源仍需在環境設定中設定並重啟。
-        </Alert>}
-        {table?.name === "events" && <Alert severity="info">
-          手動新增的事件會直接納入一般事件清單、統計和 Gemini 報告；不會產生真實攝影機截圖。
-        </Alert>}
       </Stack>
     </DialogContent>
     <DialogActions sx={{ p: 2 }}>
@@ -145,7 +139,6 @@ export default function EngineeringDatabase({ notify }) {
   };
 
   return <Stack spacing={2}>
-    <Alert severity="info">此處直接讀寫 <strong>backend/safety.db</strong>。異常事件和攝影機資料可增刪改查，操作紀錄唯讀。帳號、登入工作階段、AI 對話與密鑰不開放直接修改。刪除前請先使用「資料備份」。</Alert>
     <Card variant="outlined"><CardContent>
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }} mb={2}>
         <FormControl size="small" sx={{ minWidth: 220 }}>
@@ -216,15 +209,13 @@ function ClearEventData({ notify, onCleared }) {
     finally { setBusy(false); }
   };
   return <Card variant="outlined" sx={{ borderColor: "error.main" }}><CardContent>
-    <Typography variant="h6" fontWeight={700} color="error" mb={1}>一鍵清空事件資料</Typography>
-    <Typography variant="body2" color="text.secondary" mb={2}>
-      刪除所有異常事件、人員紀錄、事件截圖與 AI 安全報告，事件編號的每日流水號會重新從 001 開始。帳號、攝影機、辨識設定、框線顏色、AI 對話與操作紀錄會保留。清空前會自動備份到 backend/backups。
-    </Typography>
+    <Typography variant="h6" fontWeight={700} color="error" mb={2}>一鍵清空事件資料</Typography>
     <Button variant="contained" color="error" onClick={() => setOpen(true)}>清空事件資料</Button>
     <Dialog open={open} onClose={close} maxWidth="xs" fullWidth>
       <DialogTitle>確定清空所有事件資料？</DialogTitle>
       <DialogContent>
-        <Typography variant="body2" mb={2}>此操作無法在網頁上復原，只能從備份檔還原。請輸入「清空」確認。</Typography>
+        <Typography variant="body2" mb={1}>將刪除：異常事件、人員紀錄、事件截圖、AI 安全報告（會先自動備份）。</Typography>
+        <Typography variant="body2" mb={2}>此操作無法在網頁上復原。請輸入「清空」確認。</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         <TextField autoFocus fullWidth size="small" label="輸入「清空」" value={text} onChange={event => setText(event.target.value)} />
       </DialogContent>

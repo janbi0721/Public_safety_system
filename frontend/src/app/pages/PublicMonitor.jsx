@@ -12,16 +12,13 @@ import { useCameraDetections } from "app/hooks/camera";
 import { api } from "app/services/api";
 import {useAvailableCameras} from "app/hooks/availableCameras";
 import ModeSelect from "app/components/ModeSelect";
+import { cameraLabel } from "./shared";
 import { AlarmScreenFrame, VideoOverlay, WorkerStatusPanel, groupAlertsByPerson, useAlarmTitle, useAlarmVoice, useHmi, useNewAlarm } from "app/components/SafetyAlarm";
 
 function useClock() {
   const [now,setNow]=useState(()=>new Date());
   useEffect(()=>{const timer=setInterval(()=>setNow(new Date()),1000);return ()=>clearInterval(timer)},[]);
   return now;
-}
-
-function StatusDot({ color }) {
-  return <Box component="span" sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: color, display: "inline-block", boxShadow: `0 0 0 3px ${color}33` }} />;
 }
 
 // Worker screen: shown on a wall display nobody scrolls, so everything fits
@@ -48,7 +45,6 @@ export default function PublicMonitor() {
   const alarmCount = groupAlertsByPerson(liveAlerts).length;
   useAlarmTitle(alarmCount);
   const flashing = useNewAlarm(liveAlerts);
-  const cameraName = cameras.find(c => c.camera_id === selected)?.name || selected;
   const toggleAudio = () => { const next = !audio; setAudio(next); if (next) speak('語音警告已啟用'); };
 
   return (
@@ -62,22 +58,14 @@ export default function PublicMonitor() {
             <Box sx={{ width: 36, height: 36, borderRadius: 1.5, bgcolor: HMI.brandBg, display: "grid", placeItems: "center", flexShrink: 0 }}>
               <ShieldOutlined sx={{ color: HMI.brand, fontSize: 22 }} />
             </Box>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography fontWeight={700} lineHeight={1.2} noWrap sx={{ fontSize: { xs: 16, md: 18 } }}>現場安全監控</Typography>
-              <Typography noWrap sx={{ fontSize: 12, color: HMI.muted }}>PPE 即時辨識 · 安全帽 · 防毒面具 · 手套</Typography>
-            </Box>
+            <Typography fontWeight={700} noWrap sx={{ fontSize: { xs: 16, md: 18 } }}>現場安全監控</Typography>
           </Stack>
 
           <Select size="small" value={selected} displayEmpty onChange={e=>setSelected(e.target.value)}
             sx={{ minWidth: 170, fontSize: 14, bgcolor: HMI.raised, "& .MuiOutlinedInput-notchedOutline": { borderColor: HMI.border } }}
-            renderValue={value => value ? (cameras.find(c => c.camera_id === value)?.name || value) : "選擇攝影機"}>
-            {cameras.map(c=><MenuItem key={c.camera_id} value={c.camera_id}>{c.name}</MenuItem>)}
+            renderValue={value => value ? cameraLabel(value) : "選擇攝影機"}>
+            {cameras.map(c=><MenuItem key={c.camera_id} value={c.camera_id}>{cameraLabel(c.camera_id)}</MenuItem>)}
           </Select>
-
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ fontSize: 14, color: connected ? HMI.text : HMI.warn }}>
-            <StatusDot color={connected ? HMI.ok : HMI.warn} />
-            <span>{connected ? "AI 監控中" : "連線中斷"}</span>
-          </Stack>
 
           <Stack direction="row" alignItems="center" spacing={.5}>
             <Tooltip title={audio ? "關閉語音警告" : "開啟語音警告（每台裝置需手動開啟一次）"}>
@@ -106,7 +94,7 @@ export default function PublicMonitor() {
           <Box sx={{ minHeight: 0, minWidth: 0, borderRadius: 2.5, overflow: "hidden", border: "1px solid", borderColor: alarmCount ? HMI.alarm : HMI.border, bgcolor: HMI.video }}>
             {selected
               ? <CameraView fill showHeader={false} cameraId={selected} frame={frame}>
-                  <VideoOverlay cameraName={cameraName} fps={connected ? aiFps : null} alarmCount={alarmCount} />
+                  <VideoOverlay fps={connected ? aiFps : null} alarmCount={alarmCount} />
                 </CameraView>
               : <Box sx={{ height: "100%", display: "grid", placeItems: "center", color: HMI.muted }}>目前沒有已啟用且連線成功的攝影機</Box>}
           </Box>

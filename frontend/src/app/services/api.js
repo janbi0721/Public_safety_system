@@ -114,6 +114,10 @@ export const api = {
     return request(`/api/admin/people?${params}`, { auth: true });
   },
   adminPerson: (sessionId) => request(`/api/admin/people/${sessionId}`, { auth: true }),
+  messageContacts: () => request("/api/admin/messages/contacts", { auth: true }),
+  messageUnread: () => request("/api/admin/messages/unread", { auth: true }),
+  messageThread: (otherId, afterId = 0) => request(`/api/admin/messages/${otherId}?after_id=${afterId}`, { auth: true }),
+  sendMessage: (otherId, body) => request(`/api/admin/messages/${otherId}`, { method: "POST", auth: true, body: { body } }),
   setEventImproved: (eventId, isImproved) =>
     request(`/api/admin/events/${eventId}/improved`, {
       method: "PATCH",

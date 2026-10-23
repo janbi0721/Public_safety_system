@@ -172,15 +172,11 @@ export function AlarmScreenFrame({ active, flashing }) {
   }} />;
 }
 
-/** Small overlays on the live video: camera label + LIVE, and an alarm badge. Always dark (they sit on video). */
-export function VideoOverlay({ cameraName, fps, alarmCount }) {
+/** Small overlays on the live video: AI FPS and an alarm badge. Always dark (they sit on video). */
+export function VideoOverlay({ fps, alarmCount }) {
   const H = useHmi();
   const chip = { display: "inline-flex", alignItems: "center", gap: .75, px: 1.25, py: .5, borderRadius: 1, bgcolor: "rgba(11,15,20,.72)", color: "#E6EAF0", fontSize: 13, fontWeight: 600, backdropFilter: "blur(4px)" };
   return <>
-    <Stack direction="row" gap={1} sx={{ position: "absolute", top: 12, left: 12, zIndex: 2 }}>
-      <Box sx={chip}><Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: H.alarm }} />LIVE</Box>
-      {cameraName && <Box sx={chip}>{cameraName}</Box>}
-    </Stack>
     {fps != null && <Box sx={{ ...chip, position: "absolute", top: 12, right: 12, zIndex: 2, fontVariantNumeric: "tabular-nums", color: "#B6C0CE" }}>AI {Number(fps).toFixed(0)} FPS</Box>}
     {alarmCount > 0 && <Box sx={{ ...chip, position: "absolute", left: 12, bottom: 12, zIndex: 2, bgcolor: H.alarm, color: "#fff", fontSize: 15, px: 1.5, py: .75 }}>
       <ReportOutlined sx={{ fontSize: 20 }} />{alarmCount} 名人員防護不足
@@ -272,7 +268,7 @@ export function WorkerStatusPanel({ alerts = [], people = [], connected, flashin
   const state = !connected ? "offline" : alarmed.length ? "alarm" : "normal";
   const missing = [...new Set(alarmed.flatMap(row => PPE.filter(item => row.status[item.key] === "violation").map(item => item.label)))];
   const header = {
-    offline: { Icon: SignalWifiConnectedNoInternet4Outlined, color: H.warnText, sub: H.warnText, bg: H.warnBg, title: "監控訊號中斷", text: "AI 畫面暫時無法更新，請通知管理人員" },
+    offline: { Icon: SignalWifiConnectedNoInternet4Outlined, color: H.warnText, sub: H.warnText, bg: H.warnBg, title: "監控訊號中斷", text: "請通知管理人員" },
     normal: { Icon: VerifiedUserOutlined, color: H.okText, sub: H.muted, bg: H.okBg, title: "現場正常", text: people.length ? `畫面中 ${people.length} 人，未發現防護缺失` : "畫面中目前沒有人員" },
     alarm: { Icon: ReportOutlined, color: "#fff", sub: "rgba(255,255,255,.92)", bg: H.alarm, title: "安全警報", text: `${alarmed.length} 名人員防護不足` }
   }[state];
@@ -288,21 +284,14 @@ export function WorkerStatusPanel({ alerts = [], people = [], connected, flashin
     </Box>
 
     <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: { xs: 1.5, md: 2 }, display: "flex", flexDirection: "column", gap: 1.25 }}>
-      {state === "offline" && <Typography sx={{ color: H.muted, m: "auto", textAlign: "center" }}>連線恢復後將自動更新</Typography>}
-      {state !== "offline" && !rows.length && <Box sx={{ m: "auto", textAlign: "center", color: H.muted }}>
-        <Typography sx={{ fontSize: 13, letterSpacing: ".1em", mb: 1.5 }}>本區必備防護裝備</Typography>
-        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 96px)", gap: 1.25, justifyContent: "center" }}>
-          {PPE.map(item => <PpeTile key={item.key} item={item} status="unknown" compact />)}
-        </Box>
-      </Box>}
       {rows.map(row => <PersonRow key={String(row.trackId)} row={row} />)}
     </Box>
 
-    <Box sx={{ px: { xs: 2, md: 2.5 }, py: 1.5, borderTop: "1px solid", borderColor: state === "alarm" ? H.alarmBorder : H.border, bgcolor: state === "alarm" ? H.alarmBg : "transparent" }}>
-      <Typography sx={{ fontSize: "clamp(14px, 1.15vw, 19px)", fontWeight: 700, color: state === "alarm" ? H.alarmText : H.muted }}>
-        {state === "alarm" ? `請立即停止作業，戴好${missing.join("、")}後再繼續` : "進入作業區請全程配戴安全帽、防毒面具與手套"}
+    {state === "alarm" && <Box sx={{ px: { xs: 2, md: 2.5 }, py: 1.5, borderTop: "1px solid", borderColor: H.alarmBorder, bgcolor: H.alarmBg }}>
+      <Typography sx={{ fontSize: "clamp(14px, 1.15vw, 19px)", fontWeight: 700, color: H.alarmText }}>
+        請立即停止作業，戴好{missing.join("、")}後再繼續
       </Typography>
-    </Box>
+    </Box>}
   </Box>;
 }
 

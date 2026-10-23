@@ -16,7 +16,7 @@ import PaletteOutlined from "@mui/icons-material/PaletteOutlined";
 import EngineeringDatabase from "./EngineeringDatabase";
 import { api, DEFAULT_CAMERA_ID } from "../services/api";
 import SystemStatus from "./SystemStatus";
-import { eventCode } from "./shared";
+import { cameraLabel, eventCode } from "./shared";
 
 const SECTIONS = [
   { id: "cameras", label: "攝影機管理", icon: <TuneOutlined /> },
@@ -53,11 +53,10 @@ function EngineeringCameras({notify}) {
     await refresh();notify('攝影機設定已更新');
   }catch(e){setError(e.message)}finally{setBusy('')}};
   return <Card variant="outlined"><CardContent><Typography variant="h6" mb={2}>攝影機管理</Typography>
-    <Alert severity="info" sx={{mb:2}}>開啟後仍要成功取得畫面才會出現在主管端與工人端。停用會移除公開選單並停止辨識；RTSP 網址含密碼，設定後不會回顯。</Alert>
     {error&&<Alert severity="error" sx={{mb:2}}>{error}</Alert>}
     <Stack spacing={3}>{items.map(c=><Box key={c.camera_id}>
       <Stack direction={{xs:'column',sm:'row'}} alignItems={{sm:'center'}} gap={2}>
-        <Box sx={{minWidth:180}}><Typography fontWeight={700}>{c.name}</Typography><Typography variant="caption">{c.camera_id} · {c.online?'已連線':'未連線'}</Typography></Box>
+        <Box sx={{minWidth:180}}><Typography fontWeight={700}>{cameraLabel(c.camera_id)}</Typography><Typography variant="caption">{c.online?'已連線':'未連線'}</Typography></Box>
         <FormControlLabel label="啟用" control={<Switch checked={Boolean(c.is_active)} disabled={busy===c.camera_id} onChange={e=>void update(c,e.target.checked)}/>}/>
         <TextField type={c.source_type==='rtsp'?'password':'text'} size="small" sx={{flex:1}} value={sources[c.camera_id]||''}
           placeholder={c.source_type==='rtsp'?'輸入新的 RTSP URL（已設定的不顯示）':`裝置編號（目前 ${c.source||'0'}）`}
@@ -109,7 +108,6 @@ function EnvironmentEditor({ notify }) {
       <Typography variant="h6" fontWeight={700}>環境設定 (.env)</Typography>
       <Button size="small" variant="outlined" onClick={() => void reload()}>重新讀取</Button>
     </Stack>
-    <Alert severity="info" sx={{ mb: 2 }}>只開放核准欄位。API Key 及帶帳密的攝影機網址不顯示原文，留空不更改原值；修改後需要重新啟動。</Alert>
     {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
     <Stack spacing={2}>
       {fields.map(field => <Stack key={field.name} direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }}>
@@ -155,7 +153,6 @@ function VoiceSettings({ notify }) {
   };
   return <Card variant="outlined"><CardContent>
     <Typography variant="h6" fontWeight={700} mb={1}>語音警告音量</Typography>
-    <Typography variant="body2" color="text.secondary">此設定套用於工人端的瀏覽器語音警告。工人端仍需自行點擊啟用聲音。</Typography>
     {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
     <Box sx={{ maxWidth: 480, mt: 3, mb: 2 }}>
       <Typography fontWeight={600}>音量：{volume}%</Typography>
@@ -193,7 +190,6 @@ function BoxColors({ notify }) {
   const classes = data?.classes || [];
   return <Card variant="outlined"><CardContent>
     <Typography variant="h6" fontWeight={700} mb={1}>辨識框線顏色</Typography>
-    <Typography variant="body2" color="text.secondary">設定即時 AI 畫面與事件截圖中，每種物件的框線顏色。類別依目前模型自動列出。</Typography>
     {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
     {!data && !error && <Typography sx={{ mt: 2 }}>載入中…</Typography>}
     <Stack spacing={1.5} sx={{ mt: 3, mb: 3, maxWidth: 480 }}>
@@ -262,7 +258,6 @@ function TestEvents({ notify }) {
   return <Stack spacing={2}>
     <Card variant="outlined"><CardContent>
       <Typography variant="h6" fontWeight={700} mb={1}>產生模擬事件</Typography>
-      <Alert severity="warning" sx={{ mb: 2 }}>模擬事件會直接寫入正式事件列表，並納入儀表板、統計分析與 Gemini 報告，不再區分事件類別。這是手動產生的資料，不代表 YOLO 實際偵測；不會觸發現場語音警報，也不會產生真實攝影機截圖。請勿將其當成事故影像證據。</Alert>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       <Typography fontWeight={600} variant="body2" mb={1}>快速新增</Typography>
       <Stack direction="row" flexWrap="wrap" gap={1} mb={3}>
@@ -280,7 +275,7 @@ function TestEvents({ notify }) {
         <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel>攝影機</InputLabel>
           <Select value={cameraId} label="攝影機" onChange={event => setCameraId(event.target.value)}>
-            {cameras.map(cam => <MenuItem key={cam.camera_id} value={cam.camera_id}>{cam.name || cam.camera_id}</MenuItem>)}
+            {cameras.map(cam => <MenuItem key={cam.camera_id} value={cam.camera_id}>{cameraLabel(cam.camera_id)}</MenuItem>)}
           </Select>
         </FormControl>
         <TextField size="small" label="人員 ID（選填）" type="number" value={trackId} onChange={event => setTrackId(event.target.value)} inputProps={{ min: 1, max: 999999 }} />
@@ -302,7 +297,7 @@ function TestEvents({ notify }) {
                 <Typography fontWeight={700} sx={{ fontFamily: "monospace" }}>{eventCode(item)}</Typography>
                 <Typography variant="body2">{TEST_TYPES.find(x => x[0] === item.event_type)?.[1] || item.event_type}</Typography>
               </Stack>
-              <Typography variant="caption" color="text.secondary">{item.camera_id} · {item.start_time} UTC</Typography>
+              <Typography variant="caption" color="text.secondary">{cameraLabel(item.camera_id)} · {item.start_time} UTC</Typography>
             </Box>
             <Button size="small" color="error" onClick={() => void remove(item.id)}>刪除</Button>
           </Stack>
@@ -361,7 +356,7 @@ export default function EngineerMaintenance() {
         </CardContent>
       </Card>
       <Box sx={{ flex: 1, width: "100%", minWidth: 0 }}>
-        <Typography variant="h5" fontWeight={800} mb={2}>{SECTIONS.find(item => item.id === section)?.label}</Typography>
+        <Typography variant="h5" component="h1" mb={3}>{SECTIONS.find(item => item.id === section)?.label}</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {notice && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setNotice("")}>{notice}</Alert>}
         {section === "recognition" && <Stack spacing={2}>
@@ -379,9 +374,6 @@ export default function EngineerMaintenance() {
               {PPE_OPTIONS.map(([id, label]) => <FormControlLabel key={id} label={label} control={<Checkbox checked={required.includes(id)}
                 onChange={event => setRequired(old => event.target.checked ? [...new Set([...old, id])] : old.filter(value => value !== id))} />} />)}
             </Stack>
-            <Typography variant="body2" color="text.secondary" mt={2}>
-              同一人同一項未戴好只會有一筆事件，直到戴好或離開鏡頭才結束；轉身、手被擋住等暫時看不清楚不會結束事件。
-            </Typography>
             <Stack direction={{ xs: "column", sm: "row" }} gap={2} my={2}>
               {TIMING_FIELDS.map(([key, label, min, max, step]) => <TextField key={key} size="small" type="number" label={label} value={timing[key]}
                 inputProps={{ min, max, step }} onChange={event => setTiming(old => ({ ...old, [key]: Number(event.target.value) }))} />)}

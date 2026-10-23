@@ -91,5 +91,9 @@ def capture(event_id,phase,raw,annotated,frame_id,captured_at):
         if frame is None:continue
         filename=f'event_{event_id}_{phase}_{name}.jpg'
         path=ROOT/filename
-        if cv2.imwrite(str(path),frame,[cv2.IMWRITE_JPEG_QUALITY,92]):
+        # cv2.imwrite cannot open non-ASCII paths (D:\專題) on Windows; it only works
+        # when ultralytics has patched it. Encode in memory and write the file ourselves.
+        ok,encoded=cv2.imencode('.jpg',frame,[cv2.IMWRITE_JPEG_QUALITY,92])
+        if ok:
+            path.write_bytes(encoded.tobytes())
             add_snapshot(event_id,phase,name,filename,frame_id,captured_at)

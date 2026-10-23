@@ -53,12 +53,32 @@ export function buildTheme(mode){
       hmi:t
     },
     shape:{borderRadius:8},
-    typography:{fontFamily:FONT,fontSize:14,body1:{fontSize:14}},
+    typography:{
+      fontFamily:FONT,fontSize:14,
+      // 14px reads fine on desktop dashboards; phones get 16px body text.
+      body1:{fontSize:14,'@media (max-width:600px)':{fontSize:16}},
+      body2:{'@media (max-width:600px)':{fontSize:15}},
+      h5:{fontWeight:700,fontSize:'1.375rem'},
+      h6:{fontWeight:700,fontSize:'1.0625rem'},
+      button:{textTransform:'none',fontWeight:600}
+    },
     components:{
-      MuiCard:{styleOverrides:{root:{borderColor:t.border}}},
+      // Every page uses the same flat, outlined surfaces; no drop shadows.
+      MuiCard:{defaultProps:{variant:'outlined'},styleOverrides:{root:{borderColor:t.border,borderRadius:12}}},
       MuiPaper:{styleOverrides:{outlined:{borderColor:t.border}}},
+      MuiCardContent:{styleOverrides:{root:{padding:20,'&:last-child':{paddingBottom:20}}}},
       // Top bars: neutral surface with a hairline, not a saturated colour block.
-      MuiAppBar:{defaultProps:{elevation:0,color:'inherit'},styleOverrides:{root:{backgroundColor:t.surface,color:t.text,borderBottom:`1px solid ${t.border}`}}}
+      MuiAppBar:{defaultProps:{elevation:0,color:'inherit'},styleOverrides:{root:{backgroundColor:t.surface,color:t.text,borderBottom:`1px solid ${t.border}`}}},
+      MuiButton:{defaultProps:{disableElevation:true},styleOverrides:{root:{minHeight:36,borderRadius:8},sizeSmall:{minHeight:32}}},
+      // Clearly visible keyboard focus on every control (WCAG 2.4.7).
+      MuiButtonBase:{styleOverrides:{root:{'&.Mui-focusVisible':{outline:`2px solid ${t.primary}`,outlineOffset:2}}}},
+      MuiTableCell:{styleOverrides:{
+        head:{fontWeight:700,fontSize:13,color:t.muted,backgroundColor:t.raised,whiteSpace:'nowrap'},
+        root:{borderColor:t.border}
+      }},
+      MuiChip:{styleOverrides:{root:{fontWeight:600}}},
+      MuiAlert:{styleOverrides:{root:{borderRadius:8}}},
+      MuiDialog:{styleOverrides:{paper:{borderRadius:12}}}
     }
   });
 }

@@ -21,6 +21,9 @@ backend/snapshots/
 mediamtx/auto.key
 mediamtx/auto.crt
 
+# Local tools downloaded onto this machine (ffmpeg is ~115MB, over GitHub's file limit)
+tools/
+
 # Node
 node_modules/
 frontend/dist/

@@ -48,7 +48,6 @@ export default function SupervisorLogin() {
                 <AdminPanelSettingsOutlined />
               </Box>
               <Typography variant="h5" fontWeight={800}>管理系統登入</Typography>
-              <Typography variant="body2" color="text.secondary">請輸入帳號與密碼</Typography>
             </Stack>
 
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

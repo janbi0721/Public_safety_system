@@ -1,6 +1,7 @@
 """Runtime two-input camera controller; only healthy enabled inputs reach public listings."""
 import os,threading,time,logging
 from database import get_connection,get_cameras
+from v2_data import get_settings
 from rtsp_cam import Camera
 from worker import YoloWorker
 from state import DetectionState
@@ -27,65 +28,86 @@ def all_camera_settings():
     return [dict(row) for row in rows]
 
 class CameraManager:
+    """Starts/stops one worker per enabled camera.
+
+    Opening a camera (RTSP may take ~30 s) and loading a Detector are slow, so
+    they never run under self.lock: online()/get() are called many times per
+    second, also from async WebSocket handlers, and must not wait on them.
+    """
     def __init__(self,detector,pose,required_ppe,persisted,trigger):
         self.detector=detector;self.pose=pose;self.required_ppe=required_ppe
         self.persisted=persisted;self.trigger=trigger
         self.entries={};self.lock=threading.RLock();self._first_detector_used=False
+        self._reconcile_lock=threading.Lock()  # one reconcile at a time (loop + update())
         self.done=threading.Event()
         self.thread=threading.Thread(target=self._loop,daemon=True,name='CameraManager')
-    def start(self):self.reconcile();self.thread.start()
+    # The first reconcile runs in the background thread so startup (and the API) is not held up.
+    def start(self):self.thread.start()
     def stop(self):
         self.done.set();self.thread.join(timeout=4)
         with self.lock:
-            for cid in list(self.entries):self._stop(cid)
-    def _stop(self,cid):
-        item=self.entries.pop(cid,None)
-        if item:
-            item['worker'].stop();item['worker'].join(timeout=3)
+            items=[self.entries.pop(cid) for cid in list(self.entries)]
+        for item in items:self._stop_item(item)
+    @staticmethod
+    def _stop_item(item):
+        item['worker'].stop();item['worker'].join(timeout=3)
+    def _build(self,cid,row):
+        source=row['source'];source=int(source) if source.isdecimal() else source
+        cam=Camera(source=source,width=1280,height=720,fps=30)
+        st=DetectionState()
+        # A tracker must NEVER be shared between different camera streams.
+        if cid=='camera-01' and not self._first_detector_used:
+            detector=self.detector;self._first_detector_used=True
+        else:
+            detector=Detector(
+                self.detector.ppe_model_path, self.detector.person_model_path,
+                confidence=self.detector.confidence, imgsz=self.detector.imgsz,
+                ppe_confidence=self.detector.ppe_confidence,
+                ppe_imgsz=self.detector.ppe_imgsz,
+            )
+        worker=YoloWorker(cam,detector,st,camera_id=cid,required_ppe=self.required_ppe,
+            event_trigger_seconds=self.trigger,pose=self.pose,
+            publish_url=(os.getenv('AI_PUBLISH_URL','rtsp://127.0.0.1:8554/camera01_ai')
+                         if cid=='camera-01' else
+                         f'rtsp://127.0.0.1:8554/{cid.replace("-", "")}_ai'))
+        # Read settings now, not the copy from startup: engineers may have changed them since.
+        settings=get_settings();self.persisted=settings
+        if 'required_ppe' in settings:worker.analyzer.required_ppe=settings['required_ppe']
+        for key in ('event_trigger_seconds','recovery_seconds','occlusion_seconds'):
+            if key in settings:setattr(worker.event_manager,'trigger_seconds' if key=='event_trigger_seconds' else key,settings[key])
+        return {'camera':cam,'worker':worker,'state':st,'source':row['source']}
     def reconcile(self):
-        rows=all_camera_settings()
-        with self.lock:
-            for row in rows:
-                cid=row['camera_id'];enabled=bool(row['is_active']) and bool(row['source'].strip())
-                old=self.entries.get(cid)
-                if old and (not enabled or old['source']!=row['source']):self._stop(cid);old=None
-                if not enabled or old:continue
+        with self._reconcile_lock:
+            rows=all_camera_settings()
+            stopped=[];wanted=[]
+            with self.lock:
+                for row in rows:
+                    cid=row['camera_id'];enabled=bool(row['is_active']) and bool(row['source'].strip())
+                    old=self.entries.get(cid)
+                    if old and (not enabled or old['source']!=row['source']):stopped.append(self.entries.pop(cid));old=None
+                    if enabled and not old:wanted.append(row)
+            for item in stopped:self._stop_item(item)
+            for row in wanted:
+                cid=row['camera_id']
                 try:
-                    source=row['source'];source=int(source) if source.isdecimal() else source
-                    cam=Camera(source=source,width=1280,height=720,fps=30)
-                    st=DetectionState()
-                    # A tracker must NEVER be shared between different camera streams.
-                    if cid=='camera-01' and not self._first_detector_used:
-                        detector=self.detector;self._first_detector_used=True
-                    else:
-                        detector=Detector(
-                            self.detector.ppe_model_path, self.detector.person_model_path,
-                            confidence=self.detector.confidence, imgsz=self.detector.imgsz,
-                            ppe_confidence=self.detector.ppe_confidence,
-                            ppe_imgsz=self.detector.ppe_imgsz,
-                        )
-                    worker=YoloWorker(cam,detector,st,camera_id=cid,required_ppe=self.required_ppe,
-                        event_trigger_seconds=self.trigger,pose=self.pose,
-                        publish_url=(os.getenv('AI_PUBLISH_URL','rtsp://127.0.0.1:8554/camera01_ai')
-                                     if cid=='camera-01' else
-                                     f'rtsp://127.0.0.1:8554/{cid.replace("-", "")}_ai'))
-                    if 'required_ppe' in self.persisted:worker.analyzer.required_ppe=self.persisted['required_ppe']
-                    for key in ('event_trigger_seconds','recovery_seconds','occlusion_seconds'):
-                        if key in self.persisted:setattr(worker.event_manager,'trigger_seconds' if key=='event_trigger_seconds' else key,self.persisted[key])
-                    self.entries[cid]={'camera':cam,'worker':worker,'state':st,'source':row['source']}
-                    worker.start()
+                    item=self._build(cid,row)
+                    with self.lock:self.entries[cid]=item
+                    item['worker'].start()
                 except Exception:logging.exception('Unable to start camera %s',cid)
     def _loop(self):
-        while not self.done.wait(3):
+        while True:
             try:self.reconcile()
             except Exception:logging.exception('Camera management error')
+            if self.done.wait(3):break
     def get(self,cid):
         with self.lock:return self.entries.get(cid)
     def online(self,cid):
         e=self.get(cid)
         if not e or not e['worker'].is_alive():return False
-        frame,fid,at=e['camera'].read_with_meta()
-        return frame is not None and at is not None and time.time()-at<8
+        cam=e['camera']
+        if hasattr(cam,'meta'):fid,at=cam.meta()
+        else:_,fid,at=cam.read_with_meta()
+        return at is not None and time.time()-at<8
     def visible(self):
         rows=all_camera_settings()
         return [dict(camera_id=r['camera_id'],name=r['name'],location=r['location'],

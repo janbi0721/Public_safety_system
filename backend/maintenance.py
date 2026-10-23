@@ -26,13 +26,14 @@ def backup_database():
     # sqlite3's own context manager only commits; close explicitly or Windows
     # keeps the temp .db locked and unlink() below raises PermissionError.
     with closing(sqlite3.connect(source)) as src,closing(sqlite3.connect(name)) as tgt:src.backup(tgt)
-    from zipfile import ZipFile,ZIP_DEFLATED
+    from zipfile import ZipFile,ZIP_DEFLATED,ZIP_STORED
     archive=dest/(name.stem+'.zip')
     with ZipFile(archive,'w',ZIP_DEFLATED,compresslevel=5) as z:
         z.write(name,'safety.db')
         snapshots=BASE/'snapshots'
         if snapshots.is_dir():
-            for path in snapshots.glob('*.jpg'):z.write(path,'snapshots/'+path.name)
+            # JPEGs are already compressed; storing them skips useless CPU work.
+            for path in snapshots.glob('*.jpg'):z.write(path,'snapshots/'+path.name,compress_type=ZIP_STORED)
     name.unlink(missing_ok=True)
     return str(archive)
 

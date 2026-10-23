@@ -23,8 +23,8 @@ class Camera:
         self.lock = threading.Lock()
         self.running = True
 
-        self._open()
-
+        # Opening happens in the capture thread: an unreachable RTSP source can
+        # take ~30 s to time out and must not block whoever creates the Camera.
         self.thread = threading.Thread(
             target=self._capture_loop,
             name="CameraCapture",
@@ -48,11 +48,19 @@ class Camera:
         cam.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         cam.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         cam.set(cv2.CAP_PROP_FPS, self.fps)
+        if not isinstance(self.source, str):
+            # Webcams default to uncompressed YUY2, which USB limits to ~10 fps at 720p.
+            # MJPG gives more frames; it must be set after the size and fps to take effect.
+            cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
+        if not self.running:  # released while we were still connecting
+            cam.release()
+            return
         self.cam = cam
 
     def _capture_loop(self):
+        self._open()
         while self.running:
             if self.cam is None or not self.cam.isOpened():
                 time.sleep(0.5)
@@ -82,6 +90,11 @@ class Camera:
             if self.frame is None:
                 return None, None, None
             return self.frame.copy(), self.frame_id, self.captured_at
+
+    def meta(self):
+        """Frame id and capture time without copying the frame (cheap health check)."""
+        with self.lock:
+            return self.frame_id, self.captured_at
 
     def release(self):
         self.running = False

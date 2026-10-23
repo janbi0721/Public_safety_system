@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import sqlite3
 import time
@@ -62,15 +63,13 @@ from state import DetectionState
 from multi_cameras import CameraManager,initialize_sources
 from worker import YoloWorker
 from event_manager import EventManager
+import messaging
 from yolo_obj_detector import Detector
 
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 load_dotenv(PROJECT_ROOT / ".env")
-CAMERA_ID = os.getenv("CAMERA_ID", "camera-01")
-CAMERA_SOURCE_RAW = os.getenv("CAMERA_SOURCE", "0")
-CAMERA_SOURCE = int(CAMERA_SOURCE_RAW) if CAMERA_SOURCE_RAW.isdigit() else CAMERA_SOURCE_RAW
 PPE_MODEL = os.getenv("PPE_MODEL", str(BASE_DIR / "model" / "best.pt"))
 PERSON_MODEL = os.getenv("PERSON_MODEL", str(BASE_DIR / "model" / "yolo11n.pt"))
 REQUIRED_PPE = [
@@ -138,7 +137,7 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://10.207.33.9:5173",
     ],
-    allow_origin_regex=r"^https?://(?:localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):5173$",
+    allow_origin_regex=r"^https?://(?:localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):5173$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -254,8 +253,9 @@ async def websocket_camera(websocket:WebSocket,camera_id:str):
         while mgr.online(camera_id):
             entry=mgr.get(camera_id)
             if not entry:break
-            snap=entry['state'].get()
-            if snap['sequence']!=last:
+            # Only copy the state when the worker produced a new result.
+            if entry['state'].sequence!=last:
+                snap=entry['state'].get()
                 await websocket.send_json(snap['data']);last=snap['sequence']
             await asyncio.sleep(.08)
     except WebSocketDisconnect:pass
@@ -348,6 +348,41 @@ def _utc_text(value: datetime | None) -> str | None:
     if value.tzinfo is not None:
         value = value.astimezone(timezone.utc).replace(tzinfo=None)
     return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+# --- One-to-one messages between logged-in accounts (see messaging.py) ---
+# Literal paths are declared before /{other_id} so they are never parsed as an ID.
+
+@app.get("/api/admin/messages/contacts")
+def message_contacts(user: dict = Depends(current_supervisor)):
+    return {"contacts": messaging.contacts(user["id"]), "me": user["id"]}
+
+
+@app.get("/api/admin/messages/unread")
+def message_unread(user: dict = Depends(current_supervisor)):
+    return {"unread": messaging.unread_total(user["id"])}
+
+
+@app.get("/api/admin/messages/{other_id}")
+def message_thread(other_id: int, after_id: int = 0, user: dict = Depends(current_supervisor)):
+    messages = messaging.thread(user["id"], other_id, after_id=after_id)
+    if messages is None:
+        raise HTTPException(status_code=404, detail="找不到這個帳號")
+    return {"messages": messages, "me": user["id"]}
+
+
+class MessageInput(BaseModel):
+    body: str = Field(min_length=1, max_length=messaging.MAX_BODY)
+
+
+@app.post("/api/admin/messages/{other_id}", status_code=201)
+def message_send(other_id: int, payload: MessageInput, user: dict = Depends(current_supervisor)):
+    try:
+        return messaging.send(user["id"], other_id, payload.body)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.get("/api/admin/people")
@@ -655,8 +690,11 @@ def engineering_config(request:Request,_:dict=Depends(engineer)):
     mgr=getattr(request.app.state,'camera_manager',None)
     worker=next(iter(mgr.entries.values()))['worker'] if mgr and mgr.entries else None
     em=worker.event_manager if worker else EventManager('preview')
+    saved=get_settings()
+    # With every camera off there is no worker; show the saved values, not the defaults.
     timing={'event_trigger_seconds':em.trigger_seconds,'recovery_seconds':em.recovery_seconds,'occlusion_seconds':em.occlusion_seconds}
-    return {'settings':get_settings(),'timing':timing,'model':Path(worker.detector.ppe_model_path).name if worker else Path(PPE_MODEL).name,'classes':list(worker.detector.ppe_names.values()) if worker else [],'required_ppe':worker.analyzer.required_ppe if worker else REQUIRED_PPE,'pose_enabled':bool(worker and worker.pose)}
+    if not worker:timing={k:saved.get(k,v) for k,v in timing.items()}
+    return {'settings':saved,'timing':timing,'model':Path(worker.detector.ppe_model_path).name if worker else Path(PPE_MODEL).name,'classes':list(worker.detector.ppe_names.values()) if worker else [],'required_ppe':worker.analyzer.required_ppe if worker else saved.get('required_ppe',REQUIRED_PPE),'pose_enabled':bool(worker and worker.pose)}
 
 class EngineeringSettings(BaseModel):
     required_ppe:list[str]|None=None
@@ -855,9 +893,14 @@ def engineering_clear_events(payload:ClearEventsRequest,request:Request,user:dic
     if payload.confirm_text.strip()!='清空':raise HTTPException(400,'請輸入「清空」確認')
     backup=Path(backup_database()).name
     mgr=getattr(request.app.state,'camera_manager',None)
-    for e in list(mgr.entries.values()) if mgr else []:
-        e['worker'].event_manager.reset();e['worker'].person_recorder.reset();e['worker']._last_violation_frames.clear()
-    counts=engineering_db_clear_events(SNAPSHOT_ROOT)
+    workers=[e['worker'] for e in (list(mgr.entries.values()) if mgr else [])]
+    # Pause event/person writes while clearing, so no row is written between the
+    # table wipe and the in-memory reset (would leave links to deleted rows).
+    with contextlib.ExitStack() as paused:
+        for w in workers:paused.enter_context(w.record_lock)
+        counts=engineering_db_clear_events(SNAPSHOT_ROOT)
+        for w in workers:
+            w.event_manager.reset();w.person_recorder.reset();w._last_violation_frames.clear()
     audit(user['id'],'event_data_cleared',{**counts,'backup':backup})
     return {'ok':True,'backup':backup,'deleted':counts}
 

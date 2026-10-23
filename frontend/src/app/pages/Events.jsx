@@ -22,7 +22,8 @@ import Typography from "@mui/material/Typography";
 
 import { useEvents } from "app/hooks/admin";
 import { api } from "app/services/api";
-import { closeReasonLabel, eventCode, eventLabel, formatUtcDate } from "./shared";
+import PageHeader, { Page } from "app/components/PageHeader";
+import { cameraLabel, closeReasonLabel, eventCode, eventLabel, formatUtcDate } from "./shared";
 
 const PAGE_SIZE = 50;
 const EVENT_TYPES = ["no_helmet", "no_gas_mask", "no_gloves", "fall_detected"];
@@ -109,17 +110,12 @@ export default function Events() {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
-      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={2} mb={3}>
-        <Box>
-          <Typography variant="h5" fontWeight={700}>異常事件紀錄</Typography>
-          {view === "events" && <Typography variant="body2" color="text.secondary">共 {total} 筆符合條件</Typography>}
-        </Box>
+    <Page>
+      <PageHeader title="事件管理" meta={view === "events" ? `共 ${total} 筆` : null} actions={
         <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, value) => value && setView(value)} aria-label="分類方式">
           <ToggleButton value="events">依事件</ToggleButton>
           <ToggleButton value="people">依人員</ToggleButton>
-        </ToggleButtonGroup>
-      </Stack>
+        </ToggleButtonGroup>} />
 
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent>
@@ -131,7 +127,7 @@ export default function Events() {
                 <InputLabel>攝影機</InputLabel>
                 <Select label="攝影機" value={draft.cameraId} onChange={set("cameraId")}>
                   <MenuItem value="">全部</MenuItem>
-                  {cameras.map(camera => <MenuItem key={camera.camera_id} value={camera.camera_id}>{camera.name || camera.camera_id}</MenuItem>)}
+                  {cameras.map(camera => <MenuItem key={camera.camera_id} value={camera.camera_id}>{cameraLabel(camera.camera_id)}</MenuItem>)}
                 </Select>
               </FormControl>
               {view === "people" && <FormControlLabel label="只看有違規的人" control={
@@ -204,7 +200,7 @@ export default function Events() {
                       <Typography fontWeight={600} variant="body2">{eventLabel(event.event_type)}</Typography>
                       {event.message && <Typography variant="caption" color="text.secondary">{event.message.replace(/^【測試資料】/, "").replace(/^模擬跌倒事件$/, "人員跌倒")}</Typography>}
                     </TableCell>
-                    <TableCell>{event.camera_id}</TableCell>
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>{cameraLabel(event.camera_id)}</TableCell>
                     <TableCell>{event.track_id ?? "—"}</TableCell>
                     <TableCell>{formatUtcDate(event.end_time)}</TableCell>
                     <TableCell>
@@ -258,6 +254,6 @@ export default function Events() {
           <TextField label="主管備註" multiline rows={2} value={note} onChange={e=>setNote(e.target.value)}/>
         </Stack></DialogContent><DialogActions><Button onClick={()=>setSelected(null)}>取消</Button><Button variant="contained" onClick={saveReview}>儲存</Button></DialogActions>
       </Dialog>
-    </Box>
+    </Page>
   );
 }

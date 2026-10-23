@@ -21,6 +21,8 @@ def init_v2_db():
         db.execute("UPDATE events SET review_status='improved' WHERE is_improved=1 AND (review_status IS NULL OR review_status='pending')")
         init_event_codes(db)
         init_person_sessions(db)
+        from messaging import init_messages
+        init_messages(db)
         db.executescript("""
         CREATE TABLE IF NOT EXISTS event_snapshots(id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE, phase TEXT NOT NULL, kind TEXT NOT NULL, filename TEXT NOT NULL, frame_id INTEGER, captured_at REAL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE INDEX IF NOT EXISTS idx_snap_event ON event_snapshots(event_id);
@@ -77,8 +79,14 @@ def init_person_sessions(db):
     _init_codes(db, 'person_sessions', 'session_code', 'first_seen', 'P')
     if "person_session_id" not in {r[1] for r in db.execute("PRAGMA table_info(events)")}:
         db.execute("ALTER TABLE events ADD COLUMN person_session_id INTEGER REFERENCES person_sessions(id) ON DELETE SET NULL")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_events_person_session ON events(person_session_id)")
     # Sessions left open by a previous run (crash / restart) end at their last sighting.
     db.execute("UPDATE person_sessions SET end_time=last_seen, end_reason='system_restart' WHERE end_time IS NULL")
+    # Same for detection events: a new run starts with an empty EventManager, so an
+    # event still open here can never be closed otherwise and would stay "in progress".
+    # Simulated events (is_test=1) may be left open on purpose and are not touched.
+    db.execute("""UPDATE events SET end_time=COALESCE(last_seen_time,start_time), close_reason='system_restart',
+        updated_at=COALESCE(last_seen_time,start_time) WHERE end_time IS NULL AND COALESCE(is_test,0)=0""")
 
 def audit(supervisor_id,action,payload=None):
     with get_connection() as db: db.execute("INSERT INTO audit_logs(supervisor_id,action,payload) VALUES(?,?,?)",(supervisor_id,action,json.dumps(payload or {},ensure_ascii=False)))
@@ -176,16 +184,17 @@ def save_settings(data):
 def event_statistics(start,end,camera=None):
     # Synthetic entries are normal event records for analytics and reports.
     # The internal is_test marker is retained only for safe cleanup via engineering.
-    conditions=["date(start_time)>=date(?)", "date(start_time)<=date(?)", "coalesce(review_status,'pending')!='false_positive'"]
+    # start_time is UTC; dates and hours in reports are local time (same as event codes).
+    conditions=["date(start_time,'localtime')>=date(?)", "date(start_time,'localtime')<=date(?)", "coalesce(review_status,'pending')!='false_positive'"]
     args=[start,end]
     if camera: conditions.append('camera_id=?'); args.append(camera)
     where=' AND '.join(conditions)
     with get_connection() as db:
-        rows=[dict(r) for r in db.execute(f"SELECT id,event_type,start_time,end_time,review_status, camera_id, is_improved FROM events WHERE {where} ORDER BY start_time",args)]
+        rows=[dict(r) for r in db.execute(f"SELECT id,event_type,start_time,datetime(start_time,'localtime') AS local_start,end_time,review_status, camera_id, is_improved FROM events WHERE {where} ORDER BY start_time",args)]
     by_day={};by_type={};by_hour={};by_camera={};by_status={}
     durations=[]
     for e in rows:
-        day=e['start_time'][:10]; typ=e['event_type']; hour=e['start_time'][11:13];camera_id=e['camera_id']; st=e['review_status'] or 'pending'
+        day=e['local_start'][:10]; typ=e['event_type']; hour=e['local_start'][11:13];camera_id=e['camera_id']; st=e['review_status'] or 'pending'
         for target,key in [(by_day,day),(by_type,typ),(by_hour,hour),(by_camera,camera_id),(by_status,st)]:target[key]=target.get(key,0)+1
         if e['end_time']:
             try:

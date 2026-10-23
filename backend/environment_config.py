@@ -11,9 +11,9 @@ from dotenv import dotenv_values
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 _LOCK = RLock()
 # No model upload, model path, admin password, arbitrary file reads or shell commands.
+# Camera sources are not here: after the first start they live in the database
+# (engineering page → camera management), so a .env edit would have no effect.
 EDITABLE = {
-    "CAMERA_ID": {"label": "攝影機 ID", "type": "text", "default": "camera-01"},
-    "CAMERA_SOURCE": {"label": "攝影機來源", "type": "text", "default": "0"},
     "AI_STREAM_ENABLED": {"label": "AI 串流", "type": "bool", "default": "1"},
     "AI_PUBLISH_URL": {"label": "AI RTSP 發布位置", "type": "text", "default": "rtsp://127.0.0.1:8554/camera01_ai"},
     "PPE_CONFIDENCE": {"label": "PPE 辨識信心門檻", "type": "number", "default": "0.20"},
@@ -21,7 +21,6 @@ EDITABLE = {
     "AI_STREAM_FPS": {"label": "AI 串流 FPS", "type": "number", "default": "10"},
     "VIDEO_ENCODER": {"label": "影像編碼器", "type": "text", "default": "libx264"},
     "FFMPEG_PATH": {"label": "FFmpeg 路徑", "type": "text", "default": ""},
-    "VITE_MEDIAMTX_STREAM": {"label": "前端原始串流名稱", "type": "text", "default": "camera01"},
     "VITE_CAMERA_ID": {"label": "前端攝影機 ID", "type": "text", "default": "camera-01"},
     "GEMINI_MODEL": {"label": "Gemini 模型", "type": "text", "default": "gemini-3.5-flash-lite"},
     "GEMINI_API_KEY": {"label": "Gemini API Key", "type": "secret", "default": ""},
@@ -60,10 +59,8 @@ def _validate(name: str, value: str) -> str:
         raise ValueError(f"{name} 包含無效字元")
     if "${" in value:
         raise ValueError("不接受環境變數插值")
-    if name in ("CAMERA_ID", "VITE_CAMERA_ID") and not re.fullmatch(r"[a-zA-Z0-9_-]{1,48}", value):
+    if name == "VITE_CAMERA_ID" and not re.fullmatch(r"[a-zA-Z0-9_-]{1,48}", value):
         raise ValueError(f"{name} 只能是英文、數字、- 或 _")
-    if name == "CAMERA_SOURCE" and not (re.fullmatch(r"\d{1,2}", value) or re.match(r"(?i)^rtsps?://[^\s]+$", value) or re.match(r"(?i)^https?://[^\s]+$", value)):
-        raise ValueError("攝影機來源必須是裝置編號、RTSP 或 HTTP(S) URL")
     if name == "AI_PUBLISH_URL" and not re.fullmatch(r"(?i)rtsps?://[^\s]+", value):
         raise ValueError("AI 串流位址必須是 RTSP URL")
     if name == "AI_STREAM_ENABLED" and value not in ("0", "1"):
@@ -81,8 +78,6 @@ def _validate(name: str, value: str) -> str:
         raise ValueError("AI_STREAM_FPS 必須介於 1 到 30")
     if name == "VIDEO_ENCODER" and value not in ("libx264", "h264_nvenc"):
         raise ValueError("影像編碼器僅允許 libx264 或 h264_nvenc")
-    if name == "VITE_MEDIAMTX_STREAM" and not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", value):
-        raise ValueError("串流名稱僅能使用英數字、-、_")
     if name == "GEMINI_MODEL" and not re.fullmatch(r"[a-zA-Z0-9_.-]{1,100}", value):
         raise ValueError("Gemini 模型名稱格式不正確")
     if name == "GEMINI_API_KEY" and (not value or len(value) < 10):

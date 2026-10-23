@@ -1,0 +1,536 @@
+<title>工安監控系統流程圖</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; each chapter = heading, key-number strip, then its diagram in a scroll-safe frame. Colours follow the app's own ThemeMode tokens. */
+:root{
+  --bg:#F3F5F8; --surface:#FFFFFF; --raised:#F8FAFC; --line:#D8DEE6;
+  --fg:#101828; --muted:#475467; --accent:#1D5FD1; --accent-soft:#E8F0FD;
+  --alarm:#B42318; --ok:#067647; --warn:#B54708;
+  --font-body:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0B0F14; --surface:#121821; --raised:#18202B; --line:#263040;
+  --fg:#E6EAF0; --muted:#8A96A8; --accent:#4C9AFF; --accent-soft:#1D3B66;
+  --alarm:#FFB4B4; --ok:#3DD68C; --warn:#F5A524; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B0F14; --surface:#121821; --raised:#18202B; --line:#263040;
+  --fg:#E6EAF0; --muted:#8A96A8; --accent:#4C9AFF; --accent-soft:#1D3B66;
+  --alarm:#FFB4B4; --ok:#3DD68C; --warn:#F5A524; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.7;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px}
+.wrap{max-width:1080px;margin:0 auto;display:grid;gap:28px}
+header h1{font-size:clamp(26px,4vw,34px);line-height:1.25;margin:0 0 6px;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:68ch}
+nav ol{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+nav a{display:inline-flex;gap:6px;align-items:center;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);text-decoration:none;font-size:14px}
+nav a:hover{border-color:var(--accent)}
+nav a:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+nav b{font-family:var(--font-mono);font-weight:600;color:var(--accent);font-size:12px}
+section{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;display:grid;gap:16px;min-width:0;scroll-margin-top:16px}
+section h2{margin:0;font-size:20px;line-height:1.35;display:flex;gap:10px;align-items:baseline;text-wrap:balance}
+section h2 span{font-family:var(--font-mono);font-size:13px;color:var(--accent);font-weight:600}
+section>p{margin:0;color:var(--muted);max-width:72ch}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.facts li{background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:13px;color:var(--muted)}
+.facts strong{color:var(--fg);font-family:var(--font-mono);font-weight:600;font-variant-numeric:tabular-nums}
+.facts .alarm strong{color:var(--alarm)} .facts .ok strong{color:var(--ok)} .facts .warn strong{color:var(--warn)}
+figure{margin:0;overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--raised);padding:16px;min-width:0}
+pre.mermaid{margin:0;background:transparent;font-family:var(--font-body)}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+code{font-family:var(--font-mono);font-size:.9em;background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+footer{color:var(--muted);font-size:13px}
+@media (max-width:560px){section{padding:16px}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>工安監控系統流程圖</h1>
+  <p>依 2026-10-23 的程式碼整理（含當天修正的推流、啟動與攝影機管理），涵蓋從啟動、每一張影格的辨識、PPE 判定、事件與人員紀錄，到工人端、主管端、工程師頁每一項操作。菱形是判斷，圓角膠囊是起點或終點，圓柱是資料庫。</p>
+</header>
+
+<nav aria-label="章節">
+  <ol>
+    <li><a href="#overview"><b>00</b>整體架構</a></li>
+    <li><a href="#startup"><b>01</b>系統啟動</a></li>
+    <li><a href="#cameras"><b>02</b>攝影機管理</a></li>
+    <li><a href="#frame"><b>03</b>每張影格</a></li>
+    <li><a href="#ppe"><b>04</b>PPE 判定</a></li>
+    <li><a href="#event"><b>05</b>事件生命週期</a></li>
+    <li><a href="#person"><b>06</b>人員紀錄</a></li>
+    <li><a href="#snapshot"><b>07</b>事件截圖</a></li>
+    <li><a href="#live"><b>08</b>即時畫面與警報</a></li>
+    <li><a href="#auth"><b>09</b>登入與權限</a></li>
+    <li><a href="#supervisor"><b>10</b>主管端</a></li>
+    <li><a href="#engineering"><b>11</b>工程師頁</a></li>
+    <li><a href="#messages"><b>12</b>帳號對話</a></li>
+  </ol>
+</nav>
+
+<section id="overview">
+  <h2><span>00</span>整體架構</h2>
+  <p>三個程序一起運作：MediaMTX 轉發影像、FastAPI 負責辨識與資料、Vite 提供網頁（打包後的正式版）。</p>
+  <ul class="facts">
+    <li>FastAPI <strong>:8000</strong></li><li>Vite <strong>:5173</strong></li><li>MediaMTX RTSP <strong>:8554</strong> · WebRTC <strong>:8889</strong></li><li>WebRTC 推流 <strong>ffmpeg libx264</strong></li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  CAM1(["筆電攝影機 camera-01&lt;br/&gt;DirectShow"]) --> READ
+  CAM2(["RTSP 攝影機 camera-02&lt;br/&gt;目前連不上"]) --> READ
+  READ["OpenCV 讀取原始影格&lt;br/&gt;每台一條執行緒"] --> WORKER["YOLO 偵測執行緒&lt;br/&gt;辨識、判定、事件、人員紀錄"]
+  WORKER --> DB[("SQLite safety.db&lt;br/&gt;事件、人員、截圖、帳號、訊息、設定")]
+  WORKER --> SNAP[["backend/snapshots&lt;br/&gt;事件截圖 JPG"]]
+  WORKER --> STATE["DetectionState&lt;br/&gt;最新辨識結果"]
+  WORKER -->|"推流執行緒 ffmpeg"| MTX["MediaMTX camera01_ai&lt;br/&gt;WebRTC"]
+  STATE --> API["FastAPI :8000&lt;br/&gt;REST、WebSocket、MJPEG"]
+  DB &lt;--&gt; API
+  SNAP --> API
+  API --> WEB["Vite preview :5173 網頁&lt;br/&gt;打包後一個 JS 檔、gzip"]
+  MTX --> WEB
+  WEB --> P1["工人端 /client/monitor"]
+  WEB --> P2["主管端 /supervisor"]
+  WEB --> P3["工程師頁 /engineering"]
+  API -->|"Gemini API"| AI["Google Gemini&lt;br/&gt;只收統計數字"]
+  </pre></figure>
+</section>
+
+<section id="startup">
+  <h2><span>01</span>系統啟動</h2>
+  <p>雙擊 <code>open.bat</code> 後依序啟動三個程序；FastAPI 啟動時的 <code>lifespan</code> 會做完資料庫遷移、載入模型，就開始接受請求。開攝影機在背景進行，RTSP 連不上也不會擋住 API。</p>
+  <ul class="facts">
+    <li>程序間隔 <strong>2 秒</strong></li><li>網頁 port 開好才開瀏覽器（最多 90 秒）</li><li>人員模型 <strong>yolo11n.pt</strong></li><li>PPE 模型 <strong>best.pt</strong></li><li>姿態模型 <strong>yolo11n-pose.pt</strong></li><li>前端打包 <strong>約 12 秒</strong></li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  A(["雙擊 open.bat"]) --> B{"mediamtx.exe、main.py、package.json、.env&lt;br/&gt;python、npm 都找得到？"}
+  B -->|否| B1["顯示缺少的項目並暫停"]
+  B -->|是| C["啟動 MediaMTX&lt;br/&gt;視窗 SafetyV2-MediaMTX"]
+  C --> D["啟動 uvicorn main:app :8000&lt;br/&gt;視窗 SafetyV2-FastAPI"]
+  D --> E["視窗 SafetyV2-Frontend&lt;br/&gt;npm run build 打包前端"]
+  E --> E1{"打包成功？"}
+  E1 -->|是| E2["vite preview :5173&lt;br/&gt;提供打包後的網頁（gzip）"]
+  E1 -->|否| E3["改用 npm run dev :5173&lt;br/&gt;開發模式，其他裝置載入較慢"]
+  E2 --> E4["等到 5173 開始監聽"]
+  E3 --> E4
+  E4 --> F(["開啟 http://localhost:5173"])
+  D --> L1["lifespan：讀取根目錄 .env"]
+  L1 --> L2["init_db：supervisors、sessions、cameras、events"]
+  L2 --> L3["init_v2_db：增量遷移&lt;br/&gt;角色、system_settings、audit_logs、event_snapshots、審核欄位、is_test"]
+  L3 --> L4["事件編號觸發器、補上舊事件編號"]
+  L4 --> L5["人員紀錄資料表與編號觸發器"]
+  L5 --> L6["上次沒結束的人員紀錄&lt;br/&gt;補記 system_restart"]
+  L6 --> L7["direct_messages 訊息資料表"]
+  L7 --> L8{"資料庫裡有帳號？"}
+  L8 -->|否| L9["用 INITIAL_ADMIN_* 建立第一個 admin&lt;br/&gt;密碼只在 console 印一次"]
+  L8 -->|是| L10
+  L9 --> L10["initialize_sources&lt;br/&gt;第一次才把 .env 的攝影機來源寫入 camera_sources"]
+  L10 --> L11["讀取 system_settings&lt;br/&gt;PPE 項目、事件秒數、框線顏色、語音音量"]
+  L11 --> L12["載入 PPE 模型與人員模型"]
+  L12 --> L13{"設定了 POSE_MODEL？"}
+  L13 -->|是| L14["載入姿態模型"]
+  L13 -->|否| L15["不載入&lt;br/&gt;之後只會判正常或無法判定"]
+  L14 --> L16["CameraManager.start&lt;br/&gt;只啟動背景執行緒，第一次 reconcile 在背景跑"]
+  L15 --> L16
+  L16 --> L17(["API 開始服務&lt;br/&gt;不等攝影機連線"])
+  </pre></figure>
+</section>
+
+<section id="cameras">
+  <h2><span>02</span>攝影機管理</h2>
+  <p>攝影機的開關與來源一律以資料庫為準。工程師在網頁上改設定後會立刻重新比對，不用重啟後端。開攝影機、載入模型都在鎖外進行，API 和 WebSocket 查詢攝影機狀態時不用等。</p>
+  <ul class="facts">
+    <li>比對週期 <strong>3 秒</strong></li><li>擷取 <strong>1280×720 · 30fps</strong>（筆電攝影機用 MJPG，實測約 15fps）</li><li>讀取失敗 <strong>0.5 秒</strong>後重連</li><li>公開清單 <strong>8 秒</strong>內有影格才列入</li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  A(["CameraManager.reconcile&lt;br/&gt;背景執行緒立刻一次，之後每 3 秒"]) --> B["讀取 camera-01、camera-02&lt;br/&gt;cameras.is_active + camera_sources.source"]
+  B --> C{"啟用而且有來源？"}
+  C -->|否| D{"這台正在跑？"}
+  D -->|是| E["停止 worker、釋放攝影機&lt;br/&gt;停止辨識與推流"]
+  D -->|否| Z(["等下一輪"])
+  E --> Z
+  C -->|是| F{"已經在跑？"}
+  F -->|是，來源沒變| Z
+  F -->|是，來源改了| E2["先停止舊的 worker"] --> G
+  F -->|還沒跑| G["建立 Camera 讀取執行緒&lt;br/&gt;在執行緒裡開攝影機，不會卡住"]
+  G --> H{"是 camera-01 而且共用模型還沒被用？"}
+  H -->|是| H1["使用啟動時載入的 Detector"]
+  H -->|否| H2["另外建立一份 Detector&lt;br/&gt;追蹤狀態不能跨攝影機共用"]
+  H1 --> I["建立 YoloWorker&lt;br/&gt;EventManager + PersonRecorder"]
+  H2 --> I
+  I --> J["套用 system_settings&lt;br/&gt;必檢 PPE、三個事件秒數"]
+  J --> J2["放進攝影機清單（短暫上鎖）"] --> K["worker 開始執行，見第 03 章"] --> Z
+
+  subgraph reader["讀取執行緒（每台攝影機一條）"]
+    R00(["執行緒開始"]) --> R0
+    R0{"來源是數字？"} -->|是| R1["cv2.VideoCapture DirectShow&lt;br/&gt;失敗再用預設，設定 MJPG 格式"]
+    R0 -->|否，RTSP 網址| R2["cv2.VideoCapture FFMPEG"]
+    R1 --> R3{"讀到影格？"}
+    R2 --> R3
+    R3 -->|是| R4["保存最新影格、frame_id、時間"] --> R3
+    R3 -->|否| R5["印出讀取失敗，0.5 秒後重開"] --> R0
+  end
+  </pre></figure>
+</section>
+
+<section id="frame">
+  <h2><span>03</span>每一張影格的處理</h2>
+  <p>每台攝影機的 worker 不斷重複這個迴圈。即使畫面裡沒有人，每一張新影格也會完整跑一次。</p>
+  <ul class="facts">
+    <li>人員模型 <strong>640 · 信心 ≥ 0.5</strong></li><li>PPE 模型 <strong>PPE_IMGSZ 640 · 信心 ≥ 0.2</strong></li><li>追蹤器 <strong>BoT-SORT + ReID</strong></li><li>ID 保留 <strong>300 幀（約 30 秒）</strong></li><li>穩定編號 離開 <strong>30 秒</strong>內回來沿用</li><li>FPS 每 <strong>2 秒</strong>更新</li><li>推流失敗 <strong>5 秒</strong>後重試</li><li>寫入卡住 <strong>8 秒</strong>就重開 ffmpeg</li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  A(["worker 迴圈"]) --> B["取讀取執行緒的最新影格"]
+  B --> C{"有影格而且 frame_id 是新的？"}
+  C -->|否| C1["等 0.02 秒"] --> A
+  C -->|是| D["人員模型 + BoT-SORT 外觀追蹤&lt;br/&gt;找出每個人並給 trackId"]
+  D --> D2["穩定編號&lt;br/&gt;追蹤器給新號碼時，比對 30 秒內離開的人的衣著顏色，像就沿用舊編號&lt;br/&gt;同一格裡一個編號只給一個人"]
+  D2 --> E["PPE 模型：安全帽、防毒面具、手套的框"]
+  E --> F["姿態模型：每人 17 個關鍵點"]
+  F --> G["SafetyAnalyzer：每人每項 PPE 判定&lt;br/&gt;見第 04 章"]
+  G --> H["畫框：依類別顏色&lt;br/&gt;違規人員用違規色、標籤自動黑白字"]
+  H --> I["保存最新原始圖與標註圖&lt;br/&gt;每個違規另存最後一張畫面（最多 100 組）"]
+  I --> J["PersonRecorder 更新人員紀錄&lt;br/&gt;見第 06 章"]
+  J --> K["EventManager 處理事件&lt;br/&gt;見第 05 章，回傳所有未結束事件"]
+  K --> L{"AI_STREAM_ENABLED=1 而且找得到 ffmpeg？"}
+  L -->|是| M["把最新標註圖交給推流執行緒&lt;br/&gt;不等待，塞車就丟掉舊影格"]
+  L -->|否| N["略過推流，不顯示錯誤"]
+  M --> O["計算 AI FPS"]
+  N --> O
+  O --> P[("寫入 DetectionState&lt;br/&gt;detections、people、alerts、aiFps、frame")]
+  P --> A
+  D -.->|"任何一步發生例外"| X["記錄錯誤到 worker.error&lt;br/&gt;等 0.2 秒後繼續"]
+  X --> A
+
+  subgraph pub["推流執行緒（每台攝影機一條）"]
+    U0(["等新的標註圖"]) --> U1{"在重試等待中？"}
+    U1 -->|是| U0
+    U1 -->|否| U2{"ffmpeg 在跑而且尺寸沒變？"}
+    U2 -->|否| U3["啟動 ffmpeg&lt;br/&gt;H.264 → rtsp://127.0.0.1:8554/camera01_ai"]
+    U2 -->|是| U4
+    U3 --> U3b["放進 Job Object&lt;br/&gt;後端結束時 Windows 一併結束 ffmpeg"] --> U4["寫入一張影格"]
+    U4 -->|成功| U0
+    U4 -->|失敗，例如 MediaMTX 沒開| U5["關掉 ffmpeg，5 秒後再試"] --> U0
+    W1["worker 每次交影格時檢查"] --> W2{"寫入卡住超過 8 秒？"}
+    W2 -->|是| W3["強制結束 ffmpeg&lt;br/&gt;寫入失敗 → 5 秒後再試"]
+  end
+  </pre></figure>
+</section>
+
+<section id="ppe">
+  <h2><span>04</span>PPE 判定</h2>
+  <p>原則是「看得到才判」。先由姿態模型確認部位露出來，沒戴才算違規；背對、被擋住或出畫面一律是「無法判定」，不會產生事件。</p>
+  <ul class="facts">
+    <li>安全帽範圍 人員框上方 <strong>34%</strong></li><li>防毒面具範圍 <strong>4%–47%</strong> 高度</li><li>面具離鼻子 &lt; 人員框的 <strong>24%</strong></li><li>手套離手腕 &lt; 人員框的 <strong>9%</strong></li><li>關鍵點可信度 ≥ <strong>0.3</strong></li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  A(["每個人 × 每個必檢項目&lt;br/&gt;預設三項都檢查"]) --> P0["每個 PPE 框只分給一個人&lt;br/&gt;框中心在人員框內、離人員中心最近者"]
+  P0 --> B{"模型有這個類別？&lt;br/&gt;依 ALIASES 別名對照"}
+  B -->|否| U0["無法判定 model_unsupported"]
+  B -->|是| C{"哪一項？"}
+  C -->|安全帽| H1{"人員框上方 34% 內有安全帽？"}
+  H1 -->|有| N1["正常"]
+  H1 -->|沒有| H2{"看得到鼻子、眼睛、耳朵&lt;br/&gt;或偵測到 head 類別？"}
+  H2 -->|是| V1["未戴好"]
+  H2 -->|否| U1["無法判定 head_obscured"]
+  C -->|防毒面具| R1{"人員框 4%–47% 高度內有面具？"}
+  R1 -->|有| R2{"看得到鼻子？"}
+  R2 -->|否| N2["正常（沒有姿態也算）"]
+  R2 -->|是| R3{"面具在鼻子附近？"}
+  R3 -->|是| N3["正常"]
+  R3 -->|否| U2["無法判定 uncertain_alignment"]
+  R1 -->|沒有| R4{"看得到鼻子？"}
+  R4 -->|是| V2["未戴好"]
+  R4 -->|否| U3["無法判定 face_obscured"]
+  C -->|手套| G1{"兩隻手腕都看得到？"}
+  G1 -->|是| G2{"兩手各配到一副不同的手套？"}
+  G2 -->|是| N4["正常"]
+  G2 -->|否| V3["未戴好"]
+  G1 -->|否| G3{"偵測到兩副不重疊的手套？"}
+  G3 -->|是| N5["正常"]
+  G3 -->|否| U4["無法判定 hand_obscured"]
+  V1 --> OUT["產生違規&lt;br/&gt;no_helmet、no_gas_mask、no_gloves"]
+  V2 --> OUT
+  V3 --> OUT
+  OUT --> NEXT(["交給 EventManager"])
+  </pre></figure>
+</section>
+
+<section id="event">
+  <h2><span>05</span>事件生命週期</h2>
+  <p>同一個人、同一項裝備只會有一筆事件，一直延續到真的戴好或離開鏡頭。看不清楚的時候事件保持開啟，不會結束後又重開。沒有 trackId 的違規不建立事件。</p>
+  <ul class="facts">
+    <li class="alarm">建立事件 持續未戴好 <strong>1.5 秒</strong></li><li class="ok">已改正 持續正常 <strong>2 秒</strong></li><li class="warn">離開鏡頭 <strong>30 秒</strong>（可設 5–600）</li><li>三個秒數都能在工程師頁調整</li><li>最後時間每 <strong>2 秒</strong>寫一次資料庫</li>
+  </ul>
+  <figure><pre class="mermaid">
+stateDiagram-v2
+  state "待確認（還不是事件）" as pending
+  state "進行中" as active
+  state "恢復中" as recovering
+  state "離開中" as leaving
+  state "已結束" as closed
+  [*] --> pending: 判定未戴好
+  pending --> pending: 持續未戴好，未滿 1.5 秒
+  pending --> [*]: 中斷超過 1.5 秒，直接取消
+  pending --> [*]: 判定戴好，立刻取消
+  pending --> active: 滿 1.5 秒，建立事件
+  active --> active: 仍未戴好，更新最後時間
+  active --> active: 看不清楚，事件保持開啟
+  active --> recovering: 判定正常
+  recovering --> active: 又判定未戴好
+  recovering --> recovering: 看不清楚，繼續計時
+  recovering --> closed: 正常持續 2 秒，記 recovered
+  active --> leaving: 人不在畫面
+  leaving --> active: 回到畫面
+  leaving --> closed: 離開超過 30 秒，記 left_camera，結束時間是最後看到的時間
+  active --> closed: worker 停止，記 system_stopped
+  active --> closed: 上次沒正常關閉，下次啟動時記 system_restart
+  closed --> [*]
+  </pre></figure>
+  <figure><pre class="mermaid">
+flowchart LR
+  S(["建立事件時"]) --> S1["寫入 events&lt;br/&gt;自動產生 YYYYMMDD-HHMMSS-NNN"]
+  S1 --> S2["綁到這個人的人員紀錄"]
+  S2 --> S3["人員時間軸記「未戴好」"]
+  S3 --> S4["存開始截圖，見第 07 章"]
+  S4 --> S5["alerts 帶 eventId 送到網頁&lt;br/&gt;工人端播報一次"]
+  E(["結束事件時"]) --> E1["寫入 end_time 與 close_reason"]
+  E1 --> E1b{"system_stopped、system_restart？"}
+  E1b -->|是| E6(["不存截圖、不寫人員時間軸"])
+  E1b -->|否| E2{"recovered？"}
+  E2 -->|是| E3["人員時間軸記「已戴好」"]
+  E2 -->|否| E4["人員時間軸不另外記"]
+  E3 --> E5["存結束截圖"]
+  E4 --> E5
+  O(["其他會結束或清除事件的操作"]) --> O1["工程師一鍵清空：所有事件與狀態重設"]
+  O --> O2["模擬事件：直接寫入，可選擇已結束"]
+  O --> O3["主管審核或標記已改善：只改審核狀態，不影響偵測"]
+  </pre></figure>
+</section>
+
+<section id="person">
+  <h2><span>06</span>人員紀錄</h2>
+  <p>每個人每次出現在攝影機前就是一筆紀錄，記下進入、每項裝備的狀態變化與離開。這裡的「人」不是員工身分，換攝影機或離開太久就是另一筆。</p>
+  <ul class="facts">
+    <li>編號 <strong>YYYYMMDD-HHMMSS-PNNN</strong></li><li>last_seen 每 <strong>5 秒</strong>寫一次</li><li>看不清楚 <strong>不寫入</strong>時間軸</li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  A(["每張影格：畫面中的每個人"]) --> B{"這個 trackId 有開著的紀錄？"}
+  B -->|否| C["新增人員紀錄&lt;br/&gt;記進入時間"]
+  B -->|是| D["更新最後看到時間"]
+  C --> D
+  D --> E{"距上次寫入超過 5 秒？"}
+  E -->|是| F["寫入 last_seen"]
+  E -->|否| G
+  F --> G{"這項從沒違規過&lt;br/&gt;而且穩定正常 2 秒？"}
+  G -->|是| H["時間軸記「已戴好」"]
+  G -->|否| G1(["不記"])
+  A2(["每張影格：不在畫面的人"]) --> L{"離開超過 30 秒？"}
+  L -->|是| L1["結束紀錄 left_camera"]
+  L -->|否| L2(["繼續保留"])
+  EV1["EventManager 建立事件"] --> M1["時間軸記「未戴好」&lt;br/&gt;時間點是開始違規的那一刻"]
+  EV2["EventManager 以 recovered 結束事件"] --> M2["時間軸記「已戴好」"]
+  W1["worker 停止"] --> W2["結束所有紀錄 system_stopped"]
+  W3["沒有正常關閉，下次啟動"] --> W4["補記 system_restart"]
+  </pre></figure>
+</section>
+
+<section id="snapshot">
+  <h2><span>07</span>事件截圖</h2>
+  <p>每筆事件在開始和結束時各存原始圖與標註圖。截圖只開放給登入的帳號。</p>
+  <ul class="facts">
+    <li>JPEG 品質 <strong>92</strong></li><li>位置 <strong>backend/snapshots</strong></li><li>檔名 <strong>event_ID_start_raw.jpg</strong> 等四張</li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  A(["事件建立"]) --> B["取當下最新的原始圖與標註圖"]
+  B --> C["存 start_raw、start_annotated"]
+  D(["事件結束"]) --> E{"結束原因是 recovered？"}
+  E -->|是| F["用當下畫面（已戴好）"]
+  E -->|否| G["用這個違規最後一張畫面"]
+  F --> H["存 end_raw、end_annotated"]
+  G --> H
+  C --> I[("event_snapshots 記錄")]
+  H --> I
+  I --> J["主管端：事件 → 截圖／審核"]
+  J --> K{"刪除截圖？"}
+  K -->|是| L["刪掉圖檔與紀錄&lt;br/&gt;事件文字紀錄保留"]
+  M["工程師資料庫管理刪事件"] --> N{"還有截圖？"}
+  N -->|是| N1["拒絕：先刪截圖，避免留下孤兒檔案"]
+  </pre></figure>
+</section>
+
+<section id="live">
+  <h2><span>08</span>即時畫面與警報</h2>
+  <p>工人端和主管端即時監控都靠 WebSocket 接收辨識結果。影像優先用 WebRTC，連不上就改用後端的 MJPEG。</p>
+  <ul class="facts">
+    <li>WebSocket 檢查 <strong>0.08 秒</strong></li><li class="warn">超過 <strong>10 秒</strong>沒新結果 → 連線中斷</li><li>WebRTC 等 <strong>5 秒</strong></li><li>MJPEG 品質 <strong>82</strong></li><li class="alarm">新警報閃 <strong>6 秒</strong></li><li>語音音量每 <strong>15 秒</strong>同步</li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  A(["開啟工人端或主管即時監控"]) --> B["連 WebSocket /ws/cameras/攝影機"]
+  B --> B1{"攝影機在線？"}
+  B1 -->|否| B2["關閉連線，稍後重連"]
+  B1 -->|是| C["結果有更新就推送"]
+  C --> D{"10 秒內收到新結果？"}
+  D -->|否| D1["顯示「連線中斷」&lt;br/&gt;面板琥珀色「監控訊號中斷」"]
+  D -->|是| D2["顯示「AI 監控中」"]
+  D2 --> F{"有未結束的事件？"}
+  F -->|否| G["面板「現場正常」&lt;br/&gt;每人一張 PPE 檢查表"]
+  F -->|是| H["面板「安全警報」&lt;br/&gt;螢幕紅框、分頁標題 ⚠"]
+  H --> I{"出現新的事件編號？"}
+  I -->|否| I1["維持穩定紅色"]
+  I -->|是| J["閃爍 6 秒"]
+  J --> K{"這台裝置開了語音？"}
+  K -->|否| K1(["只顯示畫面"])
+  K -->|是| K2["警報音 + 同一人合成一句話&lt;br/&gt;每筆事件只講一次，排隊不打斷"]
+  A --> V["影像：先試 WebRTC camera01_ai"]
+  V --> W{"5 秒內連上？"}
+  W -->|是| W1["顯示 WebRTC 影像"]
+  W -->|否| W2["改用 MJPEG /ai.mjpg"]
+  A --> VO["每 15 秒讀取語音音量"]
+  </pre></figure>
+</section>
+
+<section id="auth">
+  <h2><span>09</span>登入與權限</h2>
+  <p>主管端要登入；工人端與工程師頁不用。主管帳號管理只有 admin 能用。</p>
+  <ul class="facts">
+    <li>token 有效 <strong>12 小時</strong></li><li>角色 <strong>supervisor · engineer · admin</strong></li><li class="warn">工程師頁 <strong>免登入</strong></li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  A(["/supervisor/login"]) --> B["POST /api/auth/login"]
+  B --> C{"帳號存在、啟用、密碼正確？"}
+  C -->|否| D["401 帳號或密碼錯誤"]
+  C -->|是| E["建立 session，token 有效 12 小時&lt;br/&gt;同時清掉過期 session"]
+  E --> F["token 存在瀏覽器 localStorage"]
+  F --> G["之後每個請求帶 Bearer token"]
+  G --> H{"呼叫哪一類 API？"}
+  H -->|"/api/public、/ws、/api/health"| P["不用登入"]
+  H -->|"/api/admin/engineering、系統狀態"| Q["不用登入&lt;br/&gt;帶 engineer 或 admin token 時才記錄帳號"]
+  H -->|"/api/admin/supervisors"| R{"token 有效而且是 admin？"}
+  R -->|否| R1["401 或 403"]
+  R -->|是| R2["允許"]
+  H -->|"其他 /api/admin"| S{"token 有效？"}
+  S -->|否| S1["401 登入已失效"]
+  S -->|是| S2["允許"]
+  </pre></figure>
+</section>
+
+<section id="supervisor">
+  <h2><span>10</span>主管端功能</h2>
+  <p>所有主管端資料都來自 FastAPI，統計與 AI 報告只用事件資料，被審核為誤判的事件不列入統計。</p>
+  <ul class="facts">
+    <li>事件每頁 <strong>50 筆</strong>，每 <strong>5 秒</strong>更新</li><li>儀表板每 <strong>10 秒</strong>更新</li><li>AI 對話預設 <strong>近 30 天</strong></li><li>AI 報告最多 <strong>366 天</strong></li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  subgraph dash["主管儀表板"]
+    D1["畫面中人員：即時 WebSocket"]
+    D2["今日事件、待改善事件（尚未審核）：每 10 秒查總數"]
+    D3["最近事件 8 筆 → 全部"]
+  end
+  subgraph ev["事件管理"]
+    E1["搜尋條件：日期、快速選擇、攝影機、類型、改善、審核、關鍵字"] --> E2["GET /api/admin/events&lt;br/&gt;回傳 events 與 total"]
+    E2 --> E3["列表與分頁"]
+    E3 --> E4["標記已改善／改回未改善"]
+    E3 --> E5["截圖／審核：待處理、已改善、誤判 + 備註"]
+    E5 --> E6{"審核為誤判？"}
+    E6 -->|是| E7["不列入統計與報告"]
+    E3 --> E8["切換「依人員」→ 人員列表 → 時間軸 → 相關事件"]
+  end
+  subgraph an["統計分析"]
+    A1["選日期區間"] --> A2["event_statistics&lt;br/&gt;排除誤判，日期與時段用台灣時間"] --> A3["總數、改善率、每日趨勢、類型、時段、狀態、攝影機"]
+  end
+  subgraph ai["AI 安全經理"]
+    G1["輸入問題"] --> G2{"問題裡有日期？"}
+    G2 -->|是| G3["用問題裡的日期"]
+    G2 -->|否| G4["用近 30 天"]
+    G3 --> G5["統計數字 + 最近 10 則對話 → Gemini"]
+    G4 --> G5
+    G5 --> G6["存對話紀錄"]
+    R1["選日期產生報告"] --> R2["統計數字 → Gemini&lt;br/&gt;要求不可編造數值"] --> R3["存 safety_reports"]
+  end
+  subgraph acc["帳號管理（只有 admin）"]
+    C1["新增、改密碼、啟用停用、刪除"]
+  end
+  </pre></figure>
+</section>
+
+<section id="engineering">
+  <h2><span>11</span>工程師頁</h2>
+  <p>所有裝置都可以直接進入。每一項寫入操作都會記到操作紀錄（免登入時帳號欄位是空的）。</p>
+  <ul class="facts">
+    <li>.env 可改 <strong>10</strong> 個欄位</li><li class="alarm">一鍵清空需輸入 <strong>清空</strong></li><li>備份位置 <strong>backend/backups</strong></li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  subgraph camx["攝影機管理"]
+    K1["開關或更換來源"] --> K2{"camera-01 是數字？camera-02 是 rtsp://？"}
+    K2 -->|否| K3["拒絕"]
+    K2 -->|是| K4["寫入資料庫 → 立即 reconcile"]
+  end
+  subgraph rec["辨識設定"]
+    S1["必檢 PPE、建立秒數、改正秒數、離開秒數"] --> S2["套用到所有 worker → 存 system_settings"]
+  end
+  subgraph col["框線顏色"]
+    B1["每個類別選色"] --> B2["只存跟預設不同的 → 立即套用到畫面與之後的截圖"]
+  end
+  subgraph env[".env 環境設定"]
+    V1["只顯示白名單 10 個欄位&lt;br/&gt;密鑰與含帳密網址不回傳原文&lt;br/&gt;攝影機來源改在攝影機管理"] --> V2["寫入 .env，保留其他欄位"] --> V3["要重啟 FastAPI 與 Vite 才生效"]
+  end
+  subgraph voice["語音警告音量"]
+    O1["0–100"] --> O2["存 system_settings → 工人端 15 秒內同步"]
+  end
+  subgraph test["產生模擬事件"]
+    T1["選類型、攝影機、人員 ID、備註、是否結束"] --> T2["寫入 events，is_test=1&lt;br/&gt;算進統計，不播報、不截圖"]
+    T3["刪除模擬事件"]
+  end
+  subgraph dbm["資料庫管理"]
+    M1["events、cameras：搜尋、分頁、新增、修改、刪除"]
+    M2["audit_logs：唯讀"]
+    M3["不開放任意 SQL、密碼雜湊、session"]
+  end
+  subgraph clear["一鍵清空事件資料"]
+    X1["輸入「清空」"] --> X2["先備份資料庫與截圖 zip"] --> X3["暫停所有 worker 的事件與人員紀錄寫入"]
+    X3 --> X4["刪除事件、截圖、人員紀錄、AI 報告&lt;br/&gt;內部編號從頭開始"]
+    X4 --> X4b["重設所有 worker 的事件與人員狀態，再恢復寫入"]
+    X4b --> X5["保留帳號、攝影機、設定、AI 對話、訊息、操作紀錄"]
+  end
+  subgraph bak["資料備份"]
+    Y1["資料庫 + 截圖 → zip"]
+  end
+  </pre></figure>
+</section>
+
+<section id="messages">
+  <h2><span>12</span>帳號對話</h2>
+  <p>登入的帳號之間一對一傳訊息，只有對話雙方看得到，管理員也看不到別人的對話。</p>
+  <ul class="facts">
+    <li>對話每 <strong>3 秒</strong>更新</li><li>聯絡人每 <strong>5 秒</strong></li><li>側欄未讀每 <strong>8 秒</strong></li><li>每則最多 <strong>2000 字</strong></li>
+  </ul>
+  <figure><pre class="mermaid">
+flowchart TD
+  A(["主管端 → 訊息"]) --> B["聯絡人列表：最後一則、未讀數"]
+  B --> C["選擇一個帳號"]
+  C --> D["讀取整段對話&lt;br/&gt;對方傳來的標成已讀"]
+  D --> E["輸入訊息，Enter 傳送"]
+  E --> F{"空白、超過 2000 字、傳給自己、&lt;br/&gt;對方不存在或已停用？"}
+  F -->|是| G["拒絕並顯示原因"]
+  F -->|否| H[("寫入 direct_messages")]
+  H --> I["對方側欄出現未讀紅點"]
+  I --> J["對方打開對話 → 標成已讀"]
+  J --> K["我這邊的訊息顯示「已讀」"]
+  </pre></figure>
+</section>
+
+<footer>依 D:\專題 的程式碼整理。程式修改後，流程與數值可能不同。</footer>
+</div>

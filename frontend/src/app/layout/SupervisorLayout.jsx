@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
@@ -15,7 +15,6 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import useTheme from "@mui/material/styles/useTheme";
-import AdminPanelSettingsOutlined from "@mui/icons-material/AdminPanelSettingsOutlined";
 import DashboardOutlined from "@mui/icons-material/DashboardOutlined";
 import LinkedCameraOutlined from "@mui/icons-material/LinkedCameraOutlined";
 import LogoutOutlined from "@mui/icons-material/LogoutOutlined";
@@ -28,7 +27,22 @@ import { useAuth } from "app/auth/SupervisorAuth";
 import ModeSelect from '../components/ModeSelect';
 import BarChartOutlined from '@mui/icons-material/BarChartOutlined';
 import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined';
-import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
+import ChatOutlined from '@mui/icons-material/ChatOutlined';
+import Badge from "@mui/material/Badge";
+import { api } from "app/services/api";
+
+// Unread direct messages for the sidebar badge (see pages/Messages.jsx).
+function useUnreadMessages(intervalMs = 8000) {
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.messageUnread().then(r => { if (alive) setUnread(r.unread || 0); }).catch(() => {});
+    load();
+    const timer = window.setInterval(load, intervalMs);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [intervalMs]);
+  return unread;
+}
 
 const DRAWER_WIDTH = 250;
 
@@ -48,11 +62,16 @@ const navGroups = [
     ]
   },
   {
+    title: "溝通",
+    items: [
+      { label: "訊息", path: "/supervisor/messages", icon: <ChatOutlined />, badge: "messages" }
+    ]
+  },
+  {
     title: "管理",
     items: [
       { label: "帳號管理", path: "/supervisor/supervisors", icon: <ManageAccountsOutlined />, roles:["admin"] },
-      { label: "攝影機", path: "/supervisor/cameras", icon: <LinkedCameraOutlined /> },
-      { label: "一般設定", path: "/supervisor/settings", icon: <SettingsOutlined /> }
+      { label: "攝影機", path: "/supervisor/cameras", icon: <LinkedCameraOutlined /> }
     ]
   }
 ];
@@ -64,6 +83,8 @@ export default function SupervisorLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const unreadMessages = useUnreadMessages();
+  const badges = { messages: unreadMessages };
 
   const go = (path) => {
     navigate(path);
@@ -80,7 +101,7 @@ export default function SupervisorLayout() {
       <Stack direction="row" alignItems="center" spacing={1.2} sx={{ px: 2.25, minHeight: 64 }}>
         <ShieldOutlined />
         <Box>
-          <Typography fontWeight={800} lineHeight={1.15}>AI Safety Monitoring</Typography>
+          <Typography fontWeight={800} lineHeight={1.15}>工安智慧監控</Typography>
           
         </Box>
       </Stack>
@@ -110,7 +131,9 @@ export default function SupervisorLayout() {
                       "&.Mui-selected:hover": { bgcolor: "rgba(255,255,255,.16)" },
                       "&:hover": { bgcolor: "rgba(255,255,255,.10)" }
                     }}>
-                    <ListItemIcon sx={{ minWidth: 38, color: "inherit" }}>{item.icon}</ListItemIcon>
+                    <ListItemIcon sx={{ minWidth: 38, color: "inherit" }}>
+                      {item.badge ? <Badge color="error" badgeContent={badges[item.badge] || null} max={99}>{item.icon}</Badge> : item.icon}
+                    </ListItemIcon>
                     <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: selected ? 700 : 500 }} />
                   </ListItemButton>
                 );
@@ -139,10 +162,9 @@ export default function SupervisorLayout() {
             sx={{ mr: 1, display: { md: "none" } }}>
             <MenuOutlined />
           </IconButton>
-          <AdminPanelSettingsOutlined sx={{ mr: 1, display: { xs: "none", sm: "block" } }} />
+          {/* The sidebar already shows the product name on desktop; only repeat it on phones. */}
           <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle2" fontWeight={700}>AI Safety Monitoring</Typography>
-            
+            <Typography variant="subtitle2" fontWeight={700} sx={{ display: { md: "none" } }}>工安智慧監控</Typography>
           </Box>
           <ModeSelect />
           <Typography variant="body2" sx={{ mr: 2, ml:1, display: { xs: "none", sm: "block" } }}>

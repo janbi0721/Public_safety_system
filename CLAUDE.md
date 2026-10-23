@@ -18,15 +18,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 協作規則
 
+- **開始工作前先讀 `progress.md`**：裡面有目前進度、使用者做過的決定、試過的方法和結果、已知 bug、下一步。做完一段工作後要更新它；長期規則才寫進這份 CLAUDE.md。
+- **commit 時排除**：`backend/model/best.pt`（除非使用者明確要求）、`.env`、`.claude/`、`tools/`、`backend/backups/`、`backend/snapshots/`。commit 前要掃描暫存內容裡有沒有金鑰或含帳密的 RTSP 網址。
 - **只能修改專案資料夾 `D:\專題` 內的檔案。** 不要動使用者層級設定（例如 `~/.codex`、全域 Claude 設定），要碰專案外的路徑前先問使用者。
 - **`.env` 含機密**（`GEMINI_API_KEY`、`INITIAL_ADMIN_PASSWORD`、RTSP 帳密）。不要把內容印到輸出，檢查時只看 key 名稱。`.env` 已列入 `.gitignore`。
 - **`backend/model/best.pt` 由使用者自己訓練和替換。** commit 時沒有明確指示就不要包含它。
 - `backend/snapshots/` 是執行時產生的事件截圖，可能拍到人，不要 commit。
 - 使用者用中文溝通，回覆也用繁體中文。
+- **介面不要放說明文字**（使用者要求，包含主頁）：不要加副標題、頁面介紹、功能解說、提示框。可以保留的有：
+  - 狀態資訊（例如「共 N 筆」、「畫面中 1 人」）。
+  - 警報時的操作指示。
+  - 刪除前確認對話框裡的警告。
+  - 輸入框的 placeholder。
+- 測試時不要讓自己啟動的伺服器占用或遮蔽使用者的 8000、5173：
+  - 在 Windows 上，綁 `127.0.0.1:8000` 會跟使用者 `open.bat` 開的 `0.0.0.0:8000` 同時存在，本機請求會被測試伺服器接走。
+  - 測試要用別的 port（例如後端 8010、Vite 5199）。測試完只關自己啟動的程序。
+  - MediaMTX 的 port（8554、8889）寫死在 `mediamtx.yml`，只能在使用者的系統沒在跑時才能啟動測試用的 MediaMTX。
+  - **清理測試時要連子程序一起關**（例如 `taskkill /T /PID`，或依父程序找出來），最後確認沒有殘留的 `ffmpeg.exe`。只關 Python 後端的話，ffmpeg 會變成孤兒，繼續占用 MediaMTX 頻道（2026-10-23 發生過，跑了十幾小時）。現在 `video_pipeline.py` 會把每個 ffmpeg 放進 Windows Job Object（`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`），後端結束（含 `taskkill /F`）時 Windows 會一併結束它們，但清理後還是要確認一次。
+  - 測試用的資料庫放在專案裡的暫存資料夾。刪除前先 `gc.collect()` 關掉連線，否則 Windows 會鎖檔。
+- `docs/system-flowchart.html` 是完整流程圖，已發布為 Artifact（https://claude.ai/artifact/Rq2YmXg25KZHuCEw5MH2MV）。改了流程、門檻或秒數時要一起更新，並用同一個檔案重新發布。
 
 ## 常用指令
 
-一鍵啟動（Windows）：`open.bat` 會分別開三個命名過的 cmd 視窗啟動 MediaMTX、uvicorn、Vite，並打開瀏覽器。`stop.bat` 依視窗標題關閉它們。啟動前根目錄必須有 `.env`。
+一鍵啟動（Windows）：`open.bat` 會分別開三個命名過的 cmd 視窗啟動 MediaMTX、uvicorn、前端，等 5173 開始監聽後打開瀏覽器。`stop.bat` 依視窗標題關閉它們。啟動前根目錄必須有 `.env`。
+
+- 前端視窗會先 `npm run build`，再用 `vite preview` 在 5173 提供打包後的網頁（一個 JS 檔、gzip 約 200KB）；打包失敗才改用 `npm run dev`。
+- 原因：開發模式要載入 200 多個未打包的檔案（約 4.7MB、沒有壓縮），其他裝置透過 Wi-Fi 開網頁很慢（使用者回報過）。
+- 所以**改了前端程式碼，要重新執行 `open.bat`（或重新 build）才會看到**；開發時要即時更新請另外跑 `npm run dev`。
 
 首次安裝：`install.bat`，會先 `pip install -r backend\requirements.txt`，再到 `frontend/` 執行 `npm ci`。torch 是 CUDA 11.8 版，透過 extra index 安裝。
 
@@ -44,17 +62,27 @@ npm run dev -- --host 0.0.0.0
 npm run lint
 npx eslint src/app/pages/Events.jsx                # 只檢查單一檔案
 npx vite optimize --force                          # 新增 import 後先重新打包相依套件（見下方注意事項）
-npm run build                                      # 這台電腦目前會崩潰，見下方注意事項
+npm run build                                      # 輸出到 frontend/dist（見下方 Node 24 注意事項）
+npm run preview -- --host 0.0.0.0 --port 5173     # 提供打包後的網頁，open.bat 用這個
 ```
 
-`.claude/launch.json` 有 `backend`、`frontend` 兩組設定，可用 Claude 內建瀏覽器的 preview 啟動。
+`.claude/launch.json` 有 `backend`、`frontend`（使用者的 port），以及測試用的 `backend-test`（8010）、`frontend-dev-test`（5199）、`frontend-preview-test`（5198），可用 Claude 內建瀏覽器的 preview 啟動。測試一律用測試用的設定。注意 `backend-test` 用的是正式的 `backend/safety.db`。
 
 注意事項：
-- 後端啟動時，若攝影機 02 已啟用但 RTSP 連不上，OpenCV 會卡約 30 秒才逾時，這段時間 API 沒有回應。
+- 攝影機 02 已啟用但 RTSP 連不上時，OpenCV 要約 30 秒才逾時。開攝影機在 `Camera` 自己的讀取執行緒裡進行，第一次 `reconcile()` 也在背景跑，所以不會擋住 API（2026-10-23 修正前，啟動要約 50 秒 API 才有回應）。
 - 找不到 ffmpeg（`FFMPEG_PATH` 或 PATH）時，AI 標註的 WebRTC 推流會直接跳過、不報錯，前端會自動改用 MJPEG 備援。
-- **這台電腦的 Node 24 有原生崩潰問題（錯誤碼 0xC0000409 / 3221226505）**：
-  - `npm run build` 會在 Rollup 打包階段崩潰，原因還沒找到，所以前端改完改用 lint 加開發伺服器驗證。
-  - Vite 開發伺服器在**執行中**發現新的相依套件（例如新 import 一個 `@mui/icons-material/...` 圖示）並重新打包時也會崩潰。處理方式：新增 import 後，先在 `frontend/` 執行 `npx vite optimize --force`（單獨執行不會崩潰），再啟動 `npm run dev`。
+- ffmpeg 放在 `tools/ffmpeg/ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe`（2026-10-23 從 gyan.dev 下載，SHA-256 核對過），`.env` 的 `FFMPEG_PATH` 指向它。`tools/` 列在 `.gitignore`，不要 commit（約 115MB，超過 GitHub 單檔上限）。`libx264` 和 NVIDIA 的 `h264_nvenc` 都測過可以用。
+- 每台攝影機只推 AI 標註畫面到 MediaMTX：`camera-01` → `camera01_ai`（`AI_PUBLISH_URL`），`camera-02` → `camera02_ai`。原始畫面（`camera01`）**從來不推**，不要拿它做檢查。
+- 系統狀態頁（`pages/SystemStatus.jsx`）依工程師攝影機 API 列出每台攝影機：
+  - 每台攝影機都列出 AI WebSocket、YOLO 即時資料、`<id>_ai` 的 WHEP 三項（使用者要求 RTSP 攝影機也要看得到）。
+  - 啟用的攝影機一律實際測試，讀不到畫面時三項顯示「離線」，WHEP 註明「攝影機沒有畫面」。停用的顯示「停用」，不測試。
+  - 2026-10-23 實測：ffmpeg 推流後 `camera01_ai` 正常，工人端以 WebRTC 播放 1280×720。
+  - 內建瀏覽器面板在背景時，影片會暫停解碼，`videoWidth` 是 0，不代表沒有畫面。
+- **Node 24.11.1 的 `fs.rmSync(路徑, {recursive: true})` 在含中文的路徑（`D:\專題`）會原生崩潰（錯誤碼 0xC0000409 / 3221226505）**，2026-10-23 確認：
+  - `node -e "require('fs').rmSync('有內容的資料夾',{recursive:true})"` 在專案裡就會崩潰；`fs.promises.rm` 和純英文路徑都正常。
+  - `npm run build` 以前會崩潰，就是因為 Vite 打包前用它清空 `dist`。現在 `vite.config.js` 設 `emptyOutDir: false`，改由外掛 `emptyOutDirSafely` 用 `fs.promises.rm` 清空。**不要把 `emptyOutDir` 改回 true。**
+  - 自己寫的 Node 腳本要刪資料夾時，也要用 `fs.promises.rm`。
+  - Vite 開發伺服器在**執行中**發現新的相依套件（例如新 import 一個 `@mui/icons-material/...` 圖示）並重新打包時也會崩潰，推測是同一個原因（清快取資料夾），還沒證實。處理方式：新增 import 後，先在 `frontend/` 執行 `npx vite optimize --force`（單獨執行不會崩潰），再啟動 `npm run dev`。
 
 ## 網頁入口與角色
 
@@ -79,7 +107,8 @@ npm run build                                      # 這台電腦目前會崩潰
   - `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD`：資料庫沒有主管帳號時，用來建立第一個帳號
 - 前端變數：`VITE_API_BASE_URL`、`VITE_WS_BASE_URL`、`VITE_CAMERA_ID`、`VITE_MEDIAMTX_WHEP_BASE`、`VITE_MEDIAMTX_STREAM`。
 - `environment_config.py` 是唯一能寫入 `.env` 的程式：
-  - 工程師只能透過 API 修改 `EDITABLE` 白名單裡的欄位，寫入時會保留其他欄位。
+  - 工程師只能透過 API 修改 `EDITABLE` 白名單裡的欄位（目前 10 個），寫入時會保留其他欄位。
+  - **改了沒作用的欄位不要放進白名單**：`CAMERA_SOURCE`、`CAMERA_2_SOURCE` 只在第一次啟動時寫進資料庫，之後要在工程師頁的攝影機管理改；`CAMERA_ID`、`VITE_MEDIAMTX_STREAM` 沒有程式使用。2026-10-23 已從白名單移除。
   - API 絕不能回傳機密原值，也不能回傳含帳密的 RTSP 網址。
   - 不開放修改管理員密碼和模型路徑。
 - `.env` 修改後要重啟 FastAPI 和 Vite 才會生效。
@@ -107,22 +136,46 @@ npm run build                                      # 這台電腦目前會崩潰
      - `proximity_thresh: 0.0`：人從別的位置回來也能認回來。
      - `track_buffer: 300`：約 30 秒內回來都能保留原本的 ID。
      - 換回 ByteTrack 的話，人被擋一下就會換 ID，產生重複事件。
+   - **穩定編號（`stable_identity.py`）**：BoT-SORT 遇到人短暫離開、回來時只露出半身，仍可能給新的 trackId（使用者回報過「離開一下編號就變」）。
+     - worker 在偵測之後、判定之前呼叫 `StableIdentity.assign()`，把人員的 `trackId` 換成穩定編號，原本的號碼保留在 `rawTrackId`。
+     - 新的 trackId 會跟「離開不到 `occlusion_seconds`（預設 30 秒）」的人比對上半身的 HSV 顏色直方圖。只有一個人離開、也只有一個新的人出現時，門檻放寬（0.25）；多人時要 ≥ 0.55，而且比第二名高 0.1。
+     - 因為是在判定之前替換，事件、人員紀錄、畫框都會沿用同一個編號，回來時事件也會延續。
+     - 認回舊編號時，會移除舊 raw ID 的對應，避免追蹤器之後把舊 raw ID 給別人時帶走這個編號。同一格裡若還是有兩個 raw ID 對到同一編號，帶著目前 raw ID 的人保留，另一人當新人處理。
+     - 限制：後端重啟、跨攝影機、穿著完全相同的兩人同時進出時，還是可能換號。
    - PPE 模型抓裝備。
    - 輸出的 `className` 保留模型的原始類別名稱。
 2. `PoseDetector.detect`：找出 COCO-17 關鍵點（頭、臉、手腕等）。
 3. `SafetyAnalyzer.analyze`：把 PPE 指派給人員，判定每個人每項 PPE 是 `normal`、`violation` 還是 `unknown`。
 4. `snapshot_service.draw`：畫框產生標註影像。
 5. `EventManager.process`：**同一人、同一項 PPE 只會有一筆事件，一直延續到狀態真的改變為止**（使用者要求）。
-   - 違規持續 `trigger_seconds`（預設 1.5 秒）才建立事件。還沒成立就中斷的違規直接取消。
-   - 戴好並持續 `recovery_seconds`（2 秒），事件結束，結束原因記為 `recovered`。
-   - 人離開畫面持續 `occlusion_seconds`（預設 30 秒，可設 5～600），事件結束，結束原因記為 `left_camera`。
+   - 違規持續 `trigger_seconds`（預設 1.5 秒）才建立事件。還沒成立前：看到戴好就**立刻取消**；看不到或判不出來超過 `trigger_seconds` 也取消。（以前只有後者，兩格誤判夾著 1.3 秒戴好也會成立事件。）
+   - 戴好並持續 `recovery_seconds`（2 秒），事件結束，結束原因記為 `recovered`。倒數中出現「無法判定」不會重新計時，只有再判到未戴好才會（以前偶爾一格無法判定，事件就永遠不會結束）。
+   - 人離開畫面持續 `occlusion_seconds`（預設 30 秒，可設 5～600），事件結束，結束原因記為 `left_camera`，結束時間是**最後看到這個人**的時間（跟人員紀錄一致）。
+   - worker 停止時，`EventManager.close_all()` 以 `system_stopped` 結束所有進行中的事件；後端被強制關閉的話，下次啟動時 `init_person_sessions()` 會把 `end_time` 是空的非模擬事件記為 `system_restart`。這兩種不存截圖、不寫人員時間軸。
+   - `last_seen_time` 每 `LAST_SEEN_WRITE_SECONDS`（2 秒）才寫一次資料庫，不是每格都寫。
    - 人還在畫面裡但這項無法判定（轉身、手被擋住）時，事件**保持開啟**，不會結束後重開。
    - 三個時間都能在工程師頁的辨識設定調整，存在 `system_settings`。
    - 沒有 `trackId` 的違規不建立事件。
-6. `VideoPublisher`：透過 FFmpeg 把 H.264 推到 MediaMTX，路徑是 `camera01_ai`、`camera02_ai`。
+6. `VideoPublisher`：透過 FFmpeg 把 H.264 推到 MediaMTX，路徑是 `camera01_ai`、`camera02_ai`。寫入在獨立的推流執行緒，見下方「設計原則」。
 7. 結果寫進該攝影機的 `state.DetectionState`，給 REST、WebSocket、MJPEG 讀取。
 
 事件開始和結束時，`snapshot_service.capture` 會把原始圖和標註圖存到 `backend/snapshots/`。截圖只開放給已登入的使用者。
+
+- **不要用 `cv2.imwrite`／`cv2.imread` 存取專案裡的檔案**：OpenCV 在 Windows 打不開含中文的路徑（`D:\專題`）。以前能用，是因為 ultralytics 載入時偷偷替換了這兩個函式。一律用 `cv2.imencode` 加 `Path.write_bytes`。
+- worker 的影格存起來後不會再被修改，所以 `_latest_raw`、`_latest_annotated`、`_last_violation_frames` 直接存參照，不複製。`_last_violation_frames` 只保留還在待確認或進行中的違規。
+- MJPEG 的 JPEG 由 `latest_jpeg()` 每格只編碼一次，所有觀看者共用。
+
+### 設計原則（違反會讓整個系統卡住，2026-10-23 審查時發現）
+
+- **偵測迴圈不能被任何 I/O 阻塞**：推流、截圖、資料庫寫入都不能無限期等待。
+  - `VideoPublisher.publish()` 只把最新影格交給推流執行緒就返回，塞車時丟掉舊影格。
+  - MediaMTX 沒開時 ffmpeg 不讀 stdin，寫入會永遠卡住：寫入卡住超過 `STALL_SECONDS`（8 秒）就強制結束 ffmpeg，失敗後等 `RETRY_SECONDS`（5 秒）再重開。
+- **`CameraManager.lock` 裡不能做慢的事**：開攝影機（RTSP 最多 30 秒）、載入模型都要在鎖外完成。`online()`、`get()` 會被 WebSocket 這種 async 函式頻繁呼叫，握鎖太久會讓整個事件迴圈停住。
+  - `reconcile()` 在鎖內只決定要停哪些、開哪些，停止 worker 和 `_build()`（建 Camera、Detector、worker）都在鎖外，最後才短暫上鎖放進 `entries`。
+  - `_reconcile_lock` 讓背景迴圈和 `update()` 不會同時 reconcile。
+- **async 函式（WebSocket）裡不能呼叫會等鎖或做大量運算的同步函式**。`online()` 用 `Camera.meta()` 只讀 frame_id 和時間，不複製影格；WebSocket 先比對 `state.sequence`，有新結果才 `get()`（deepcopy）。
+- **同一張影格裡，每個穩定編號只能對應一個人**。EventManager、PersonRecorder 都用 `trackId` 當 key，重複會把兩個人的事件和紀錄混在一起。
+- 清空、重設這類操作要考慮 worker 正在同時寫入：資料庫刪除和記憶狀態重設之間不能留空檔。一鍵清空會先取得每個 worker 的 `record_lock`（worker 執行 PersonRecorder 和 EventManager 時持有），在鎖內刪資料表、重設狀態，再放開。
 
 ### 人員紀錄（`person_recorder.py`）
 
@@ -143,12 +196,27 @@ npm run build                                      # 這台電腦目前會崩潰
 - 這裡的「人」是「這段時間出現在這台攝影機前的某個人」，**不是員工身分**。換攝影機或離開太久，就是另一筆紀錄。
 - API：`GET /api/admin/people`（列表與摘要，支援日期、攝影機、關鍵字、`violated_only`）、`GET /api/admin/people/{id}`（時間軸和相關事件）。前端在 `pages/Events.jsx` 用「依事件／依人員」切換，人員畫面在 `pages/PeopleView.jsx`。統計和報告仍然只用 `events`。
 
+### 帳號對話（`messaging.py`）
+
+- 登入後的帳號（主管、工程師、管理員）可以一對一傳訊息。資料表是 `direct_messages`（`sender_id`、`recipient_id`、`body`、`created_at`、`read_at`），由 `v2_data.init_v2_db()` 呼叫 `init_messages()` 建立。
+- **只有對話雙方看得到**，管理員也沒有特別權限。不能傳給自己、停用或不存在的帳號，每則最多 2000 字。
+- API（`current_supervisor`）：
+  - `GET /api/admin/messages/contacts`：其他帳號、最後一則訊息、未讀數。
+  - `GET /api/admin/messages/unread`：未讀總數。
+  - `GET /api/admin/messages/{id}`：對話內容，同時把對方傳來的標成已讀。
+  - `POST /api/admin/messages/{id}`：傳送訊息。
+  - 固定路徑要寫在 `/{other_id}` 前面。
+- 前端是 `pages/Messages.jsx`（`/supervisor/messages`），用輪詢更新：對話每 3 秒重讀整段，讓「已讀」也會更新；聯絡人每 5 秒更新。側欄的未讀數字在 `SupervisorLayout` 的 `useUnreadMessages`，每 8 秒更新。
+- 訊息不是事件資料，「一鍵清空事件資料」不會刪除。工程師頁免登入、沒有帳號，所以不提供對話。
+
 ### 多攝影機（`multi_cameras.py`）
 
 - 攝影機 ID 固定為 `camera-01`（筆電攝影機）和 `camera-02`（RTSP）。
 - 背景迴圈會定期 `reconcile()`，依照資料表 `cameras.is_active` 和 `camera_sources.source` 啟動或停止 worker，所以工程師在網頁上開關攝影機、換來源，都不用重啟。
 - `.env` 只在第一次啟動時寫入來源，之後一律以資料庫為準。
 - **每台攝影機都要有自己的 `Detector`**，因為 BoT-SORT 的追蹤狀態（含 ReID 外觀紀錄）不能跨影像串流共用。
+- 建立 worker 時（`_build`）重新讀取 `system_settings`，不要用啟動時的副本，否則工程師改過的秒數在攝影機重開後會被還原。
+- 筆電攝影機（數字來源）設定 MJPG 格式，一定要在設定解析度和 FPS **之後**設定才有效。YUY2 在 720p 只有 10 FPS，MJPG 實測約 15 FPS。
 - 只有 8 秒內有成功讀到影格的攝影機，才會出現在 `visible()` 和公開清單裡。
 
 ### PPE 判定（`safety_analyzer.py`）
@@ -199,7 +267,8 @@ npm run build                                      # 這台電腦目前會崩潰
 - **事件編號** `events.event_code`：格式 `YYYYMMDD-HHMMSS-NNN`，日期時間是台灣當地時間，NNN 是當天流水號（當天最大號 + 1，刪除事件也不會重號）。由 `v2_data._init_codes()` 建立的 SQLite trigger 在新增時自動產生，舊資料在啟動時補上。觸發器名稱是 `trg_events_event_code`，人員編號是 `trg_person_sessions_session_code`；舊名 `trg_events_code` 會在啟動時被刪掉，避免執行兩次。內部數字 `id` 不變，截圖、審核、API 路徑仍用 `id`；畫面上顯示用前端的 `eventCode()`（`pages/shared.js`）。
 - 備份 `maintenance.backup_database()` 必須用 `contextlib.closing` 關閉 sqlite 連線，否則 Windows 會鎖住暫存 `.db`，刪除時出錯，前端只會看到 `Failed to fetch`（500 錯誤回應沒有 CORS 標頭）。
 - 事件查詢（`GET /api/admin/events`）：`database._event_filters()` 是 `get_events` 和 `count_events` 共用的條件，支援攝影機、改善狀態、`start`/`end`（瀏覽器傳 ISO 時間，後端轉成 UTC 字串比對，`end` 不含）、事件類型、審核狀態、關鍵字 `q`（說明、備註、攝影機、事件編號、人員 ID）。回傳 `events` 和 `total`，前端 `pages/Events.jsx` 用它做搜尋列和分頁。
-- `gemini_service.py`：Gemini 只會收到彙總後的統計數字，不能下 SQL，也不能呼叫任何工具。
+- `gemini_service.py`：Gemini 只會收到彙總後的統計數字，不能下 SQL，也不能呼叫任何工具。提示詞裡描述系統行為的句子（例如播報規則）要跟程式一致，改行為時要一起改。
+- `event_statistics()` 的日期篩選、`by_day`、`by_hour` 用台灣時間（SQLite `'localtime'`），跟事件編號一樣；`start_time` 本身仍是 UTC。
 - 工程師的寫入操作會用 `audit()` 留下操作紀錄。
 
 ### API 分層（`main.py`）
@@ -221,6 +290,16 @@ React 18 + MUI 6 + react-router 6，用 JS/JSX，`app` 是 `src/app` 的別名�
   - 圖表用 `hmi.chart`。
   - 文字和背景的組合都檢查過符合 WCAG AA。深色模式的 `alarm` 特地調成 `#D63A3F`，讓白字能過 4.5:1。改色票時要重新檢查對比。
   - `app/theme.js` 是舊檔，沒有被使用。
+- **版面一致性**（2026-10-23 依 ui-ux-pro-max 的「Minimalism & Swiss Style」整理）：
+  - 主管端每一頁都用 `components/PageHeader.jsx`：外層 `<Page>` 統一留白和最大寬度，`<PageHeader title meta actions />` 放標題。**標題要跟側欄的名稱相同**，篩選和切換按鈕放在 `actions`。
+  - 元件的共用樣式寫在 `buildTheme()` 的 `components` 裡（卡片預設外框、圓角 12、按鈕不加陰影、表格標題、鍵盤焦點的 2px 外框），頁面裡不要再各自覆寫。
+  - 手機（600px 以下）的內文是 16px、`body2` 是 15px。
+  - 圖示底色用中性的 `action.hover`，只有數字本身代表警示時才上色（例如待改善事件 > 0）。
+  - 沒有資料時，顯示一行置中的灰字，例如「沒有連線中的攝影機」，不要用藍色的提示框。
+  - 系統名稱一律寫「工安智慧監控」。頂部列在桌面版不重複顯示名稱。
+  - **攝影機一律只顯示編號**「攝影機 01」，用 `pages/shared.js` 的 `cameraLabel(camera_id)`（使用者要求）。資料庫裡的 `cameras.name`（例如「筆電攝影機」）不再顯示。工程師資料庫管理的原始資料表除外。
+  - 工人端影像上**不要**放 LIVE 和攝影機名稱，狀態列也**不要**放「AI 監控中」（使用者要求）。斷線時由右側面板顯示「監控訊號中斷」。影像上只保留 AI FPS 和警報徽章。
+  - 「一般設定」頁已經刪掉，因為主題切換本來就在頂部列。`/supervisor/settings` 會導回儀表板。
 
 - 路由都在 `routes.jsx`：
   - `AuthGuard` 檢查是否登入。
@@ -264,6 +343,6 @@ React 18 + MUI 6 + react-router 6，用 JS/JSX，`app` 是 `src/app` 的別名�
 - `tests/test_ppe_dual_model_fix.py` 有一個測試會讀取真正的 `model/best.pt`，並寫死舊模型的類別名稱（`respirator`、`aluminized_gloves`）。目前的模型是 `helmet`、`gloves`、`gas_mask`，所以這個測試會失敗，但不影響系統運作。
 - 驗證工人端時，要模擬「現場正常」可以在瀏覽器裡包一層 `window.WebSocket`，把收到的 `alerts` 清空、`people[].ppe` 改成 normal。要模擬「監控中斷」就停掉後端。這樣不用動後端或資料庫。
 - 目前的 Python 環境**沒有安裝 pytest**（使用者表示平常執行系統不需要它；要安裝前先問）。`test_v2.py` 在 2026-10-21 用簡易方式執行過：9 個裡 8 個通過，剩下 1 個需要 `monkeypatch` 所以沒跑成。
-- 前端沒有自動化測試。改完要跑 `npx eslint <改過的檔案>`，再用開發伺服器實際打開頁面確認（`npm run build` 目前會崩潰）。
+- 前端沒有自動化測試。改完要跑 `npx eslint <改過的檔案>`，再用開發伺服器實際打開頁面確認，最後跑一次 `npm run build` 確認能打包（`open.bat` 靠它）。
 - `database.get_connection()` 回傳的連線，用 `with` 區塊**只會 commit、不會關閉**。在 Windows 上，連線沒關閉前資料庫檔案會被鎖住，無法刪除或搬移。測試時暫存資料庫可能刪不掉，要刪檔前請用 `contextlib.closing`。
 - 自動化測試不涵蓋實際硬體：攝影機、RTSP、GPU、MediaMTX、Gemini。要確認的話，就實際啟動後端，檢查 `/api/health` 和 `/api/public/cameras/camera-01/detections`。

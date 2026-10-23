@@ -5,7 +5,7 @@ import {
 } from "@mui/material";
 
 import { api } from "app/services/api";
-import { PPE_LABELS, eventCode, eventLabel, formatDuration, formatUtcDate, personEndLabel } from "./shared";
+import { PPE_LABELS, cameraLabel, eventCode, eventLabel, formatDuration, formatUtcDate, personEndLabel } from "./shared";
 
 const PAGE_SIZE = 50;
 
@@ -50,7 +50,7 @@ function PersonTimeline({ sessionId, onClose, onOpenEvent }) {
       {!person && !error && <Typography>載入中…</Typography>}
       {person && <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
-          {person.camera_id} · 追蹤 ID {person.track_id ?? "—"} · 停留 {formatDuration(person.duration_seconds)}{person.is_open ? "（仍在鏡頭中）" : ""}
+          {cameraLabel(person.camera_id)} · 追蹤 ID {person.track_id ?? "—"} · 停留 {formatDuration(person.duration_seconds)}{person.is_open ? "（仍在鏡頭中）" : ""}
         </Typography>
         <Box>
           {timelineItems(person).map((item, index) => <Stack key={index} direction="row" spacing={1.5} alignItems="flex-start" sx={{ py: 0.75 }}>
@@ -104,7 +104,7 @@ export default function PeopleView({ filters, onOpenEvent }) {
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   return <>
-    <Typography variant="body2" color="text.secondary" mb={1}>共 {total} 位人員紀錄（每次進入鏡頭算一筆，系統不辨識員工身分）</Typography>
+    <Typography variant="body2" color="text.secondary" mb={1}>共 {total} 位人員紀錄</Typography>
     <Card variant="outlined">
       <CardContent sx={{ p: 0, "&:last-child": { pb: 0 } }}>
         <Box sx={{ overflowX: "auto" }}>
@@ -125,7 +125,7 @@ export default function PeopleView({ filters, onOpenEvent }) {
             <TableBody>
               {people.map(person => <TableRow hover key={person.id}>
                 <TableCell sx={{ fontWeight: 700, whiteSpace: "nowrap", fontFamily: "monospace" }}>{person.session_code || `P${person.id}`}</TableCell>
-                <TableCell>{person.camera_id}</TableCell>
+                <TableCell sx={{ whiteSpace: "nowrap" }}>{cameraLabel(person.camera_id)}</TableCell>
                 <TableCell>{formatUtcDate(person.first_seen)}</TableCell>
                 <TableCell>{person.is_open ? <Chip size="small" color="info" label="仍在鏡頭中" /> : formatUtcDate(person.end_time)}</TableCell>
                 <TableCell sx={{ whiteSpace: "nowrap" }}>{formatDuration(person.duration_seconds)}</TableCell>
